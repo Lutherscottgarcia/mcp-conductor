@@ -1,0 +1,175 @@
+// /Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity/src/types/mcp-integration.ts
+
+/**
+ * Integration types for orchestrating the 5 existing MCPs
+ * This makes our CC-MCP the conductor of the entire ecosystem
+ */
+
+export interface ExistingMCPClients {
+  memory: MemoryMCPClient;
+  claudepoint: ClaudepointMCPClient;
+  filesystem: FilesystemMCPClient;
+  git: GitMCPClient;
+  database: DatabaseMCPClient;
+}
+
+export interface MemoryMCPClient {
+  createEntities(entities: MemoryEntity[]): Promise<void>;
+  addObservations(observations: MemoryObservation[]): Promise<void>;
+  searchNodes(query: string): Promise<MemoryNode[]>;
+  createRelations(relations: MemoryRelation[]): Promise<void>;
+  openNodes(names: string[]): Promise<MemoryNode[]>;
+}
+
+export interface ClaudepointMCPClient {
+  createCheckpoint(options: CheckpointOptions): Promise<Checkpoint>;
+  listCheckpoints(): Promise<Checkpoint[]>;
+  restoreCheckpoint(name: string): Promise<void>;
+  getChangelog(): Promise<ChangelogEntry[]>;
+}
+
+export interface FilesystemMCPClient {
+  listDirectory(path: string): Promise<DirectoryListing>;
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  searchFiles(pattern: string): Promise<string[]>;
+  getFileInfo(path: string): Promise<FileMetadata>;
+}
+
+export interface GitMCPClient {
+  status(): Promise<GitStatus>;
+  commit(message: string): Promise<string>;
+  log(options?: GitLogOptions): Promise<GitCommit[]>;
+  diff(options?: GitDiffOptions): Promise<string>;
+}
+
+export interface DatabaseMCPClient {
+  query(sql: string): Promise<QueryResult>;
+  getSchemaInfo(): Promise<SchemaInfo>;
+}
+
+// Memory MCP entity types for our orchestration
+export interface SessionRuleEntity extends MemoryEntity {
+  entityType: 'session_rule';
+  observations: [
+    string, // rule text
+    string, // priority level  
+    string, // enforcement type
+    string, // active status
+    string  // triggers
+  ];
+}
+
+export interface ConversationStateEntity extends MemoryEntity {
+  entityType: 'conversation_state';
+  observations: [
+    string, // current task
+    string, // active files
+    string, // recent decisions
+    string, // next steps
+    string  // blockers
+  ];
+}
+
+export interface HandoffPackageEntity extends MemoryEntity {
+  entityType: 'handoff_package';
+  observations: [
+    string, // claudepoint checkpoint ID
+    string, // compressed context summary
+    string, // session analytics
+    string, // git commit hash
+    string  // filesystem snapshot
+  ];
+}
+
+// Integration coordination types
+export interface OrchestrationContext {
+  sessionId: string;
+  currentTask: string;
+  activeFiles: string[];
+  memoryEntities: string[];
+  claudepointCheckpoint?: string;
+  gitCommitHash?: string;
+  databaseSession?: string;
+}
+
+export interface HandoffOrchestration {
+  // Memory MCP: Store compressed context and session rules
+  memoryPackage: {
+    compressedContext: string[];
+    sessionRules: SessionRuleEntity[];
+    workingState: ConversationStateEntity;
+    contextRelations: MemoryRelation[];
+  };
+  
+  // Claudepoint: Code state checkpoint
+  claudepointPackage: {
+    checkpointId: string;
+    description: string;
+    workingDirectory: string;
+  };
+  
+  // Database: Session analytics and learning
+  databasePackage: {
+    sessionMetrics: SessionMetrics;
+    learningPatterns: LearningPattern[];
+    contextUsage: ContextUsageStats;
+  };
+  
+  // Git: Decision and progress tracking
+  gitPackage: {
+    commitHash: string;
+    branchState: string;
+    changesSummary: string;
+  };
+  
+  // Filesystem: Active project state
+  filesystemPackage: {
+    activeFiles: FileSnapshot[];
+    projectStructure: ProjectSnapshot;
+    recentChanges: FileChange[];
+  };
+}
+
+export interface SessionMetrics {
+  sessionId: string;
+  startTime: Date;
+  endTime: Date;
+  tokenCount: number;
+  decisionsCount: number;
+  filesModified: number;
+  rulesEnforced: number;
+  contextReconstructionAccuracy: number;
+}
+
+export interface LearningPattern {
+  patternType: 'workflow' | 'context_usage' | 'rule_violation' | 'task_pattern';
+  pattern: string;
+  frequency: number;
+  effectiveness: number;
+  suggestedOptimization?: string;
+}
+
+export interface ContextUsageStats {
+  contextTypeUsage: Record<string, number>;
+  retrievalPatterns: string[];
+  compressionEffectiveness: number;
+  handoffSuccessRate: number;
+}
+
+// Real-time orchestration events
+export interface MCPOrchestrationEvent {
+  type: 'file_change' | 'git_commit' | 'rule_violation' | 'context_threshold' | 'decision_made';
+  timestamp: Date;
+  source: 'filesystem' | 'git' | 'memory' | 'database' | 'claudepoint';
+  data: any;
+  affectedMCPs: string[];
+  orchestrationAction: OrchestrationAction;
+}
+
+export interface OrchestrationAction {
+  action: 'update_memory' | 'create_checkpoint' | 'compress_context' | 'enforce_rule' | 'sync_state';
+  targetMCPs: string[];
+  parameters: Record<string, any>;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+}

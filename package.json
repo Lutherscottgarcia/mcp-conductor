@@ -1,0 +1,66 @@
+{
+  "name": "conversation-continuity-mcp",
+  "version": "1.0.0",
+  "description": "Advanced MCP server for intelligent conversation context management and session continuity",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "conversation-continuity",
+    "context-compression",
+    "session-management",
+    "claude",
+    "anthropic"
+  ],
+  "author": "Luther Garcia",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/uuid": "^10.0.0",
+    "dotenv": "^16.0.0",
+    "pg": "^8.11.0",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/luther-garcia/conversation-continuity-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/luther-garcia/conversation-continuity-mcp/issues"
+  },
+  "homepage": "https://github.com/luther-garcia/conversation-continuity-mcp#readme"
+}

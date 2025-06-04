@@ -1,0 +1,263 @@
+# Conversation Continuity MCP
+
+**File Path:** `/Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity/README.md`
+
+An advanced Model Context Protocol (MCP) server that revolutionizes AI conversation continuity through intelligent context compression, session state management, and seamless handoffs.
+
+## 🎯 Problem Solved
+
+When working with AI on long development sessions, conversations hit token limits and context is lost. This breaks workflow continuity and forces manual context recreation. The Conversation Continuity MCP solves this with:
+
+- **Smart Context Compression**: Keep relevant information, compress the rest
+- **Session State Tracking**: Maintain working state across conversation boundaries  
+- **Session Rules**: Persistent user preferences that survive session changes
+- **Predictive Context**: Learn what context you actually need
+- **Seamless Handoffs**: Automatic session transitions with zero friction
+
+## 🏗️ Architecture
+
+### Core Components
+
+1. **Smart Context Compression Engine**
+   - Semantic analysis of conversation content
+   - Relevance scoring and intelligent compression
+   - Preserves critical decisions and code changes
+
+2. **Conversation State Machine**
+   - Tracks current project, tasks, and decisions
+   - Maintains active files and next steps
+   - Manages session rules and preferences
+
+3. **Hierarchical Memory System**
+   - L1: Recent conversation (instant access)
+   - L2: Session summaries (fast retrieval)
+   - L3: Full archive (searchable)
+
+4. **Session Rules Management**
+   - User-defined workflow preferences
+   - Automatic rule enforcement
+   - Learning from user patterns
+
+5. **Predictive Context Engine**
+   - Pattern recognition for common workflows
+   - Context prediction based on task type
+   - Optimization through usage learning
+
+## 🚀 Features
+
+### Session Rules
+Define persistent rules that follow you across all conversations:
+
+```javascript
+"Always check with me before creating artifacts"
+"Display completed work in right panel for review"
+"Include full file paths in all artifacts"
+"Check existing architecture before new implementations"
+```
+
+### Intelligent Context Management
+- **85% threshold**: Begin compression preparation
+- **90% threshold**: Create handoff package  
+- **95% threshold**: Force session boundary
+- **Automatic reconstruction**: Seamless context restoration
+
+### Learning & Optimization
+- Pattern recognition for your workflow
+- Suggest new rules based on repeated corrections
+- Optimize context predictions over time
+- Track what context is actually useful
+
+## 📦 Installation
+
+```bash
+# Clone or create the project
+cd /Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity
+
+# Install dependencies
+npm install
+
+# Build the project
+npm run build
+
+# Run in development mode
+npm run dev
+```
+
+## ⚙️ Configuration
+
+Add to your Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "conversation-continuity": {
+      "command": "node",
+      "args": ["/Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity/dist/index.js"],
+      "env": {
+        "DATABASE_URL": "postgresql://username:password@localhost/conversation_continuity"
+      }
+    }
+  }
+}
+```
+
+## 🗄️ Database Setup
+
+The MCP requires a PostgreSQL database. Run the setup script:
+
+```bash
+# Create database
+createdb conversation_continuity
+
+# Run migrations
+npm run migrate
+```
+
+## 🔧 Development
+
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode with hot reload
+npm run dev
+
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
+npm run lint:fix
+```
+
+## 🏢 Project Structure
+
+```
+conversation-continuity/
+├── docs/                    # Documentation
+│   ├── technical-design.md  # Detailed architecture
+│   ├── api-reference.md     # MCP function docs
+│   └── session-rules-guide.md
+├── src/
+│   ├── index.ts            # Main MCP server entry
+│   ├── components/         # Core functionality
+│   │   ├── context-compression.ts
+│   │   ├── state-machine.ts
+│   │   ├── session-rules.ts
+│   │   └── handoff-manager.ts
+│   ├── types/              # TypeScript definitions
+│   ├── database/           # Database schema & queries
+│   └── utils/              # Helper functions
+├── tests/                  # Test suites
+└── package.json
+```
+
+## 🎛️ MCP Functions
+
+### Session Rules Management
+- `createRule(rule)`: Define new session rules
+- `getRules()`: Retrieve active rules
+- `enforceRules(action)`: Validate actions against rules
+
+### Context Management  
+- `monitorConversationLength()`: Track token usage
+- `compressHistory()`: Intelligent context compression
+- `createHandoffPackage()`: Prepare session transition
+
+### State Tracking
+- `updateWorkingState()`: Track current project state
+- `getRelevantContext()`: Retrieve contextually relevant info
+- `searchHistory()`: Search conversation archive
+
+## 🎯 Usage Examples
+
+### Creating Session Rules
+```typescript
+// User preference for approval gates
+await createRule({
+  text: "Always check before creating artifacts",
+  type: "approval",
+  triggers: ["artifact_create"],
+  enforcement: "hard_block"
+});
+```
+
+### Automatic Context Compression
+```typescript
+// Monitor conversation length
+const status = await monitorConversationLength();
+if (status.percentage > 85) {
+  // Automatically compress and prepare handoff
+  await compressHistory(0.85);
+  const handoff = await createHandoffPackage();
+}
+```
+
+## 🔬 Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Test specific component
+npm test -- --testNamePattern="SessionRules"
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📋 Roadmap
+
+### Phase 1: Core Infrastructure ✅
+- [x] Project setup and architecture
+- [x] Basic conversation monitoring
+- [x] Database schema design
+- [ ] MCP protocol implementation
+
+### Phase 2: Smart Compression
+- [ ] Semantic analysis engine
+- [ ] Relevance scoring algorithms
+- [ ] Context compression implementation
+- [ ] Handoff package creation
+
+### Phase 3: Session Rules
+- [ ] Rule definition and storage
+- [ ] Real-time rule enforcement
+- [ ] Rule learning and suggestions
+- [ ] User interface integration
+
+### Phase 4: Advanced Features
+- [ ] Predictive context engine
+- [ ] Advanced search capabilities
+- [ ] Analytics and insights
+- [ ] Performance optimization
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Built on the [Model Context Protocol](https://modelcontextprotocol.io/) by Anthropic
+- Inspired by the challenges of maintaining context in long AI development sessions
+- Part of Luther's groundbreaking MCP integration ecosystem
+
+---
+
+**Status**: 🚧 In Active Development  
+**Version**: 1.0.0-alpha  
+**Last Updated**: June 4, 2025

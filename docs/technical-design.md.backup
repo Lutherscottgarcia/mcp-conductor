@@ -1,0 +1,571 @@
+# Conversation Continuity MCP - Technical Design & Architecture
+**File Path:** `/Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity/docs/technical-design.md`
+
+## Project Directory Structure
+
+```
+/Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity/
+├── docs/
+│   ├── technical-design.md           # This document
+│   ├── api-reference.md              # MCP function documentation
+│   ├── session-rules-guide.md        # User guide for Session Rules
+│   └── implementation-notes.md       # Development notes and decisions
+├── src/
+│   ├── index.ts                      # Main MCP server entry point
+│   ├── components/
+│   │   ├── context-compression.ts    # Smart Context Compression Engine
+│   │   ├── state-machine.ts          # Conversation State Machine
+│   │   ├── memory-hierarchy.ts       # Hierarchical Memory System
+│   │   ├── session-rules.ts          # Session Rules Management Engine
+│   │   ├── predictive-context.ts     # Predictive Context Engine
+│   │   └── handoff-manager.ts        # Session handoff and reconstruction
+│   ├── types/
+│   │   ├── mcp-protocol.ts          # MCP protocol type definitions
+│   │   ├── session-types.ts         # Session and state type definitions
+│   │   └── rule-types.ts            # Session Rules type definitions
+│   ├── database/
+│   │   ├── schema.sql               # Database schema definitions
+│   │   ├── migrations/              # Database migration scripts
+│   │   └── queries.ts               # Database query functions
+│   └── utils/
+│       ├── compression-utils.ts      # Compression algorithms
+│       ├── semantic-analysis.ts     # Content analysis utilities
+│       └── validation.ts            # Rule and state validation
+├── tests/
+│   ├── unit/                        # Unit tests for each component
+│   ├── integration/                 # Integration tests with other MCPs
+│   └── fixtures/                    # Test data and mock conversations
+├── package.json                     # Project dependencies and scripts
+├── tsconfig.json                    # TypeScript configuration
+├── README.md                        # Project overview and setup guide
+└── .gitignore                       # Git ignore patterns
+```
+
+## Executive Summary
+The Conversation Continuity MCP (CC-MCP) solves the critical problem of context loss when AI conversations hit token limits during long development sessions. Instead of crude truncation, it provides intelligent context compression, state management, and seamless session handoffs.
+
+## Core Architecture
+
+### Multi-Layer Context Management System
+
+```mermaid
+graph TB
+    A[Conversation Monitor] --> B[Context Analyzer]
+    B --> C{85% Threshold?}
+    C -->|Yes| D[Smart Compression Engine]
+    C -->|No| E[Continue Monitoring]
+    D --> F[State Machine Update]
+    F --> G[Handoff Package Creation]
+    G --> H[Session Boundary Marker]
+    
+    subgraph "Storage Layers"
+        I[L1: Recent Cache]
+        J[L2: Session Summaries]
+        K[L3: Full Archive]
+    end
+    
+    B --> I
+    F --> J
+    G --> K
+```
+
+## Component Architecture
+
+### 1. Smart Context Compression Engine
+
+**Purpose**: Intelligently compress conversation history while preserving critical information
+
+**Key Features**:
+- **Recent Buffer**: Last 10-15 messages kept verbatim for natural flow
+- **Semantic Analysis**: Identifies key decisions, code changes, and breakthroughs
+- **Relevance Scoring**: Ranks content by importance to current task
+- **Compression Algorithms**: Multiple strategies based on content type
+
+**Data Structure**:
+```json
+{
+  "recent_messages": [
+    {
+      "id": "msg_001",
+      "timestamp": "2025-06-04T10:30:00Z",
+      "role": "user|assistant",
+      "content": "full message content",
+      "importance_score": 0.95,
+      "content_type": "code|discussion|decision|question"
+    }
+  ],
+  "compressed_history": {
+    "key_decisions": ["decision 1", "decision 2"],
+    "code_changes": ["file1.js modified", "new component added"],
+    "important_discoveries": ["bug found in auth", "performance optimization"],
+    "semantic_summary": "Working on user authentication system..."
+  }
+}
+```
+
+### 2. Conversation State Machine
+
+**Purpose**: Track the actual state of work rather than raw conversation
+
+**State Schema**:
+```json
+{
+  "session_id": "uuid",
+  "session_rules": {
+    "user_preferences": [
+      {
+        "id": "approval_required",
+        "rule": "Always check with me and wait until I'm ready before creating or committing new artifacts and changes",
+        "priority": 1,
+        "active": true,
+        "created": "2025-06-04T09:00:00Z"
+      },
+      {
+        "id": "artifact_display",
+        "rule": "Always display completed work in the right hand artifact panel for review",
+        "priority": 2,
+        "active": true,
+        "triggers": ["code_completion", "design_completion"]
+      },
+      {
+        "id": "architecture_check",
+        "rule": "Before designing and implementing new changes always remember the current architecture and look for artifacts to leverage or enhance",
+        "priority": 3,
+        "active": true,
+        "triggers": ["new_feature", "major_change"]
+      },
+      {
+        "id": "file_paths",
+        "rule": "Always add the complete path/filename on top of each artifact",
+        "priority": 4,
+        "active": true,
+        "triggers": ["artifact_creation"]
+      }
+    ],
+    "project_rules": [
+      {
+        "id": "testing_required",
+        "rule": "All new functions must have corresponding unit tests",
+        "scope": "FantasyGM",
+        "active": true
+      }
+    ],
+    "conditional_rules": [
+      {
+        "id": "database_backup",
+        "rule": "Create database backup before schema changes",
+        "condition": "database_schema_modification",
+        "active": true
+      }
+    ]
+  },
+  "current_state": {
+    "active_project": "FantasyGM",
+    "current_task": "implementing user authentication",
+    "task_progress": 0.65,
+    "active_files": [
+      {
+        "path": "src/auth/login.js",
+        "status": "modified",
+        "last_change": "added validation logic"
+      }
+    ],
+    "decisions_made": [
+      {
+        "decision": "Use JWT for session management",
+        "timestamp": "2025-06-04T10:15:00Z",
+        "rationale": "Better security and stateless approach"
+      }
+    ],
+    "next_steps": [
+      "Implement password hashing",
+      "Add login form validation",
+      "Test authentication flow"
+    ],
+    "context_dependencies": [
+      "user_model_schema",
+      "database_connection_config",
+      "session_middleware_setup"
+    ],
+    "blockers": [],
+    "notes": "Need to handle edge case for expired sessions"
+  }
+}
+```
+
+### 3. Hierarchical Memory System
+
+**L1 Cache (Hot Memory)**:
+- Last 10-15 complete message exchanges
+- Current working state
+- Immediate context for next response
+- **Access Time**: Instant
+- **Retention**: Until next compression cycle
+
+**L2 Cache (Warm Memory)**:
+- Session summaries from last 5 sessions
+- Compressed historical context
+- Key decision points and breakthroughs
+- **Access Time**: <100ms
+- **Retention**: 30 days
+
+**L3 Storage (Cold Archive)**:
+- Full conversation archives
+- Searchable by keywords, dates, projects
+- Complete audit trail
+- **Access Time**: <1s via search
+- **Retention**: Indefinite
+
+### 4. Hierarchical Memory MCP
+- **L1 Cache**: Recent conversation (fast access)
+- **L2 Cache**: Session summaries (medium access)  
+- **L3 Storage**: Full conversation archive (searchable)
+- Auto-manages what stays in each layer
+
+### 5. Session Rules Management Engine
+
+**Purpose**: Maintain and enforce user-defined workflow rules across all sessions
+
+**Key Features**:
+- **Persistent Rules**: User preferences that survive session boundaries
+- **Hierarchical Scope**: User-level, project-level, and session-specific rules
+- **Conditional Logic**: Rules that trigger based on context or actions
+- **Rule Validation**: Ensure rules don't conflict or create impossible scenarios
+- **Learning Integration**: Suggest new rules based on repeated user corrections
+
+**Rule Types**:
+```json
+{
+  "workflow_rules": {
+    "approval_gates": [
+      "Always check before creating artifacts",
+      "Confirm before database modifications",
+      "Wait for approval before git commits"
+    ],
+    "display_preferences": [
+      "Always use artifact panel for code",
+      "Include file paths in all artifacts",
+      "Show diffs for file modifications"
+    ],
+    "architecture_rules": [
+      "Check existing patterns before creating new ones",
+      "Leverage existing components when possible",
+      "Follow established naming conventions"
+    ],
+    "quality_gates": [
+      "Include unit tests for new functions",
+      "Document complex algorithms",
+      "Use TypeScript for new files"
+    ]
+  },
+  "conditional_rules": [
+    {
+      "trigger": "database_schema_change",
+      "action": "create_backup_first",
+      "confirmation_required": true
+    },
+    {
+      "trigger": "new_component",
+      "action": "check_existing_components",
+      "auto_suggest": true
+    }
+  ]
+}
+```
+
+**Rule Enforcement Engine**:
+- **Pre-Action Validation**: Check rules before executing commands
+- **Real-Time Reminders**: Surface relevant rules during conversation
+- **Gentle Enforcement**: Suggest compliance rather than hard blocking
+- **User Override**: Always allow user to override rules when needed
+
+### 6. Predictive Context Engine
+
+**Purpose**: Learn patterns and preemptively structure relevant context
+
+**Learning Algorithms**:
+- **Task Pattern Recognition**: "When working on auth, usually need user models"
+- **Dependency Mapping**: Automatic detection of related files/concepts
+- **Context Prediction**: Suggest what to include in handoff packages
+- **Efficiency Optimization**: Learn what context actually gets used
+
+**Predictive Models**:
+```json
+{
+  "task_patterns": {
+    "authentication": {
+      "likely_files": ["user.model.js", "auth.middleware.js"],
+      "common_decisions": ["jwt vs sessions", "password hashing"],
+      "typical_blockers": ["CORS issues", "session persistence"]
+    }
+  },
+  "user_patterns": {
+    "coding_style": "prefers TypeScript",
+    "common_workflows": ["test-driven", "component-first"],
+    "preferred_context": ["recent_decisions", "active_files", "next_steps"]
+  }
+}
+```
+
+## Implementation Strategy
+
+### Core MCP Functions
+
+```typescript
+interface ConversationContinuityMCP {
+  // Monitoring & Analysis
+  monitorConversationLength(): Promise<{ percentage: number, tokens: number }>;
+  analyzeContextRelevance(messages: Message[]): Promise<RelevanceScore[]>;
+  
+  // Compression & State Management
+  compressHistory(threshold: number): Promise<CompressionResult>;
+  updateWorkingState(newState: Partial<WorkingState>): Promise<void>;
+  
+  // Session Rules Management
+  createRule(rule: SessionRule): Promise<void>;
+  updateRule(ruleId: string, updates: Partial<SessionRule>): Promise<void>;
+  deleteRule(ruleId: string): Promise<void>;
+  getRules(scope?: 'user' | 'project' | 'session'): Promise<SessionRule[]>;
+  validateAction(action: string, context: any): Promise<RuleValidationResult>;
+  enforceRules(proposedAction: any): Promise<EnforcementResult>;
+  
+  // Session Management
+  createHandoffPackage(): Promise<HandoffPackage>;
+  reconstructContext(packageId: string): Promise<ReconstructedContext>;
+  
+  // Search & Retrieval
+  searchHistory(query: string): Promise<SearchResult[]>;
+  getRelevantContext(task: string): Promise<ContextSuggestions>;
+  
+  // Learning & Optimization
+  recordContextUsage(contextId: string, wasUseful: boolean): Promise<void>;
+  recordRuleViolation(ruleId: string, context: any, userOverride: boolean): Promise<void>;
+  optimizePredictions(): Promise<void>;
+  suggestNewRules(behaviorPattern: UserBehaviorPattern): Promise<RuleSuggestion[]>;
+}
+```
+
+### Database Schema
+
+```sql
+-- Conversation Sessions
+CREATE TABLE sessions (
+  id UUID PRIMARY KEY,
+  user_id VARCHAR(255),
+  project_name VARCHAR(255),
+  start_time TIMESTAMP,
+  end_time TIMESTAMP,
+  status ENUM('active', 'compressed', 'archived'),
+  working_state JSONB,
+  metadata JSONB
+);
+
+-- Session Rules
+CREATE TABLE session_rules (
+  id UUID PRIMARY KEY,
+  user_id VARCHAR(255),
+  project_name VARCHAR(255), -- NULL for user-level rules
+  rule_type ENUM('workflow', 'approval', 'display', 'architecture', 'quality', 'conditional'),
+  rule_text TEXT NOT NULL,
+  rule_config JSONB, -- conditions, triggers, etc.
+  priority INTEGER DEFAULT 100,
+  active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP,
+  usage_count INTEGER DEFAULT 0,
+  violation_count INTEGER DEFAULT 0
+);
+
+-- Rule Enforcement Log
+CREATE TABLE rule_enforcement_log (
+  id UUID PRIMARY KEY,
+  session_id UUID REFERENCES sessions(id),
+  rule_id UUID REFERENCES session_rules(id),
+  action_attempted TEXT,
+  enforcement_result ENUM('allowed', 'blocked', 'warned', 'user_override'),
+  user_response ENUM('complied', 'overrode', 'modified_rule'),
+  timestamp TIMESTAMP,
+  context JSONB
+);
+
+-- Message Archive
+CREATE TABLE messages (
+  id UUID PRIMARY KEY,
+  session_id UUID REFERENCES sessions(id),
+  sequence_number INTEGER,
+  role ENUM('user', 'assistant'),
+  content TEXT,
+  timestamp TIMESTAMP,
+  importance_score FLOAT,
+  content_type VARCHAR(50),
+  compressed BOOLEAN DEFAULT FALSE
+);
+
+-- Context Relationships
+CREATE TABLE context_relationships (
+  id UUID PRIMARY KEY,
+  source_type ENUM('file', 'concept', 'decision'),
+  source_id VARCHAR(255),
+  related_type ENUM('file', 'concept', 'decision'),
+  related_id VARCHAR(255),
+  relationship_strength FLOAT,
+  learned_from_session UUID REFERENCES sessions(id)
+);
+
+-- Handoff Packages
+CREATE TABLE handoff_packages (
+  id UUID PRIMARY KEY,
+  session_id UUID REFERENCES sessions(id),
+  created_at TIMESTAMP,
+  package_data JSONB,
+  reconstruction_success BOOLEAN,
+  user_satisfaction_score FLOAT
+);
+```
+
+### Session Rules in Practice
+
+**Rule Definition Examples**:
+```javascript
+// User creates rules through natural language or structured input
+const userRules = [
+  {
+    id: "approval_required",
+    text: "Always check with me and wait until I'm ready before creating or committing new artifacts and changes",
+    type: "approval",
+    triggers: ["artifact_create", "file_modify", "git_commit"],
+    scope: "user", // applies to all projects
+    enforcement: "hard_block" // won't proceed without approval
+  },
+  {
+    id: "artifact_display",
+    text: "Always display completed work in the right hand artifact panel for review",
+    type: "display",
+    triggers: ["code_completion", "design_completion"],
+    enforcement: "reminder" // suggests but doesn't block
+  },
+  {
+    id: "architecture_check",
+    text: "Before designing new features, check existing architecture and artifacts",
+    type: "architecture",
+    triggers: ["new_feature", "major_refactor"],
+    enforcement: "soft_block", // suggests checking, waits for confirmation
+    auto_actions: ["search_existing_artifacts", "list_current_patterns"]
+  }
+];
+```
+
+**Real-Time Rule Enforcement**:
+```
+🤖 Claude: "I'm about to create a new React component. Let me first check your rules..."
+
+📋 Rule Check:
+  ✅ Architecture Rule: Checking existing components first...
+  ✅ Display Rule: Will create artifact in right panel
+  ⚠️  Approval Rule: Waiting for your confirmation before proceeding
+
+Found similar components: UserCard.tsx, ProfileCard.tsx
+Would you like me to extend one of these or create a new component?
+[Proceed] [Modify Approach] [Review Existing First]
+```
+
+**Rule Learning & Suggestions**:
+- "I notice you always ask me to add TypeScript types after I create JavaScript files. Should I make this a rule?"
+- "You've corrected the file path format 3 times. Should I always include full paths in artifacts?"
+- "You seem to prefer seeing the full git diff before commits. Add this as a rule?"
+
+### Integration Points
+
+**With Existing MCPs**:
+- **Filesystem MCP**: Monitor file changes, track active files
+- **Memory MCP**: Store compressed context and state data
+- **Git MCP**: Track code evolution and decision points
+- **Database MCP**: Store conversation analytics and learning data
+- **Claudepoint MCP**: Coordinate with checkpointing for state consistency
+
+### Trigger Mechanisms
+
+**Automatic Triggers**:
+1. **85% Token Threshold**: Begin compression preparation
+2. **90% Token Threshold**: Create handoff package
+3. **95% Token Threshold**: Force session boundary
+4. **File Change Detection**: Update working state
+5. **Decision Keywords**: Mark important moments
+
+**Manual Triggers**:
+- User command: "Create checkpoint"
+- User command: "Prepare handoff"
+- User command: "Start new session"
+
+## Success Metrics
+
+**Technical Metrics**:
+- Context reconstruction accuracy (target: >90%)
+- Handoff preparation time (target: <5 seconds)
+- Relevance scoring precision (target: >85%)
+- Session continuity perception (user survey target: >4.5/5)
+
+**User Experience Metrics**:
+- Seamless continuation perception
+- Time saved vs manual context recreation
+- Reduced frustration with context loss
+- Increased productivity in long sessions
+
+## Implementation Phases
+
+### Phase 1: Core Infrastructure (Weeks 1-2)
+- Basic conversation monitoring
+- Simple compression algorithms
+- Database schema setup
+- Integration with existing MCPs
+
+### Phase 2: Smart Compression (Weeks 3-4)
+- Semantic analysis implementation
+- Relevance scoring algorithms
+- Working state tracking
+- Handoff package creation
+
+### Phase 3: Predictive Features (Weeks 5-6)
+- Pattern recognition
+- Context prediction
+- Learning algorithms
+- Performance optimization
+
+### Phase 4: Advanced Features (Weeks 7-8)
+- Advanced search capabilities
+- User customization options
+- Analytics and insights
+- Production hardening
+
+## Risk Mitigation
+
+**Data Loss Prevention**:
+- Multiple backup strategies
+- Gradual compression (never delete, only compress)
+- User confirmation for critical decisions
+- Emergency recovery procedures
+
+**Performance Concerns**:
+- Asynchronous processing
+- Efficient indexing strategies
+- Caching at multiple levels
+- Progressive enhancement approach
+
+**User Trust**:
+- Transparent compression decisions
+- Easy reversal mechanisms
+- Clear success/failure indicators
+- User control over automation level
+
+## Next Steps for Development
+
+1. **Review and enhance this design** based on feedback
+2. **Create detailed technical specifications** for each component
+3. **Set up development environment** and MCP boilerplate
+4. **Implement MVP** with basic monitoring and compression
+5. **Test integration** with existing MCP ecosystem
+6. **Iterate based on real usage** patterns and feedback
+
+---
+
+*This design represents a foundational approach to solving conversation continuity in AI development sessions. The modular architecture allows for iterative development and continuous improvement based on real-world usage patterns.*

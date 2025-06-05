@@ -17,7 +17,7 @@ import type {
   ReconstructedContext
 } from '@/types/orchestration-types.js';
 import type { SessionRule, RuleEnforcementResult, ProposedAction } from '@/types/rule-types.js';
-import type { MCPType, MCPHealth } from '@/types/shared-types.js';
+import type { MCPType, MCPHealth, GitStatus } from '@/types/shared-types.js';
 import type {
   ProjectIntelligence,
   ProjectStructure,
@@ -338,7 +338,10 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       mcpCheckpoints: {
         'claudepoint': claudepointCheckpoint.id,
         'memory': `CoordinatedCheckpoint_${checkpointId}`,
-        'database-platform': this.currentSession.id
+        'database-platform': this.currentSession.id,
+        'filesystem': 'no_checkpoint',
+        'git': 'no_checkpoint',
+        'database-analytics': 'no_checkpoint'
       },
       crossReferences: [],
       description: `Coordinated checkpoint for session ${this.currentSession.id}`
@@ -430,7 +433,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     return {
       actions,
       coordinationNeeded: mcpsToSync.length > 1,
-      mcpsToSync,
+      mcpsToSync: mcpsToSync as MCPType[],
       nextCheckInterval: 30000 // Check again in 30 seconds
     };
   }
@@ -797,7 +800,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       development: await this.createMockDevelopmentState(),
       context: await this.createMockProjectContext(),
       invalidationTriggers: [
-        { trigger: 'src/**/*.ts', type: 'file_structure', pattern: 'src/**/*.ts', importance: 'major' }
+        { trigger: 'src/**/*.ts', type: 'file_pattern', pattern: 'src/**/*.ts', importance: 'major' }
       ],
       freshness: {
         status: 'fresh',

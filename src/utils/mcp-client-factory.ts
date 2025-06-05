@@ -9,7 +9,7 @@ import type { MCPType, MCPHealth } from '@/types/shared-types.js';
 
 // ===== TEST MODE DETECTION =====
 const isTestMode = () => {
-  return !globalThis.local__memory__read_graph || 
+  return !(globalThis as any).local__memory__read_graph || 
          process.env.NODE_ENV === 'test' ||
          process.env.MCP_TEST_MODE === 'true';
 };
@@ -296,7 +296,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
       console.log(`🧠 [TEST MODE] Creating ${entities.length} entities`);
       return;
     }
-    await globalThis.local__memory__create_entities({ entities });
+    await (globalThis as any).local__memory__create_entities({ entities });
   }
 
   async addObservations(observations: MemoryObservation[]): Promise<void> {
@@ -304,7 +304,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
       console.log(`🧠 [TEST MODE] Adding observations to ${observations.length} entities`);
       return;
     }
-    await globalThis.local__memory__add_observations({ observations });
+    await (globalThis as any).local__memory__add_observations({ observations });
   }
 
   async searchNodes(query: string): Promise<MemoryNode[]> {
@@ -312,7 +312,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
       console.log(`🧠 [TEST MODE] Searching nodes: "${query}"`);
       return [];
     }
-    const result = await globalThis.local__memory__search_nodes({ query });
+    const result = await (globalThis as any).local__memory__search_nodes({ query });
     return result.nodes || [];
   }
 
@@ -325,7 +325,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
         observations: [`Mock observation for ${name}`]
       }));
     }
-    const result = await globalThis.local__memory__open_nodes({ names });
+    const result = await (globalThis as any).local__memory__open_nodes({ names });
     return result.nodes || [];
   }
 
@@ -334,7 +334,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
       console.log(`🧠 [TEST MODE] Creating ${relations.length} relations`);
       return;
     }
-    await globalThis.local__memory__create_relations({ relations });
+    await (globalThis as any).local__memory__create_relations({ relations });
   }
 
   async deleteEntities(entityNames: string[]): Promise<void> {
@@ -342,7 +342,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
       console.log(`🧠 [TEST MODE] Deleting ${entityNames.length} entities`);
       return;
     }
-    await globalThis.local__memory__delete_entities({ entityNames });
+    await (globalThis as any).local__memory__delete_entities({ entityNames });
   }
 
   async deleteObservations(deletions: MemoryObservationDeletion[]): Promise<void> {
@@ -350,7 +350,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
       console.log(`🧠 [TEST MODE] Deleting observations from ${deletions.length} entities`);
       return;
     }
-    await globalThis.local__memory__delete_observations({ deletions });
+    await (globalThis as any).local__memory__delete_observations({ deletions });
   }
 
   async deleteRelations(relations: MemoryRelation[]): Promise<void> {
@@ -358,7 +358,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
       console.log(`🧠 [TEST MODE] Deleting ${relations.length} relations`);
       return;
     }
-    await globalThis.local__memory__delete_relations({ relations });
+    await (globalThis as any).local__memory__delete_relations({ relations });
   }
 
   async readGraph(): Promise<MemoryGraph> {
@@ -375,7 +375,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
         relations: []
       };
     }
-    return await globalThis.local__memory__read_graph({});
+    return await (globalThis as any).local__memory__read_graph({});
   }
 }
 
@@ -393,7 +393,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         fileCount: 42
       };
     }
-    return await globalThis.local__claudepoint__create_checkpoint(options);
+    return await (globalThis as any).local__claudepoint__create_checkpoint(options);
   }
 
   async listCheckpoints(): Promise<Checkpoint[]> {
@@ -401,7 +401,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       console.log(`🔄 [TEST MODE] Listing checkpoints`);
       return [];
     }
-    const result = await globalThis.local__claudepoint__list_checkpoints({});
+    const result = await (globalThis as any).local__claudepoint__list_checkpoints({});
     return result.checkpoints || [];
   }
 
@@ -414,7 +414,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         filesRestored: 25
       };
     }
-    return await globalThis.local__claudepoint__restore_checkpoint({ checkpoint, dry_run: dryRun });
+    return await (globalThis as any).local__claudepoint__restore_checkpoint({ checkpoint, dry_run: dryRun });
   }
 
   async setupClaudepoint(): Promise<void> {
@@ -422,7 +422,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       console.log(`🔄 [TEST MODE] Setting up Claudepoint`);
       return;
     }
-    await globalThis.local__claudepoint__setup_claudepoint({});
+    await (globalThis as any).local__claudepoint__setup_claudepoint({});
   }
 
   async getChangelog(): Promise<ChangelogEntry[]> {
@@ -436,7 +436,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         }
       ];
     }
-    const result = await globalThis.local__claudepoint__get_changelog({});
+    const result = await (globalThis as any).local__claudepoint__get_changelog({});
     return result.entries || [];
   }
 
@@ -445,7 +445,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       console.log(`🔄 [TEST MODE] Setting changelog entry: ${entry.description}`);
       return;
     }
-    await globalThis.local__claudepoint__set_changelog(entry);
+    await (globalThis as any).local__claudepoint__set_changelog(entry);
   }
 }
 
@@ -455,7 +455,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
       console.log(`📁 [TEST MODE] Reading file: ${path}`);
       return `// Mock file content for ${path}\n// This is a test mode implementation\n`;
     }
-    const result = await globalThis.local__filesystem__read_file({ path });
+    const result = await (globalThis as any).local__filesystem__read_file({ path });
     return result.content;
   }
 
@@ -468,7 +468,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
         success: true
       }));
     }
-    const result = await globalThis.local__filesystem__read_multiple_files({ paths });
+    const result = await (globalThis as any).local__filesystem__read_multiple_files({ paths });
     return result.files || [];
   }
 
@@ -477,7 +477,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
       console.log(`📁 [TEST MODE] Writing file: ${path} (${content.length} chars)`);
       return;
     }
-    await globalThis.local__filesystem__write_file({ path, content });
+    await (globalThis as any).local__filesystem__write_file({ path, content });
   }
 
   async editFile(path: string, edits: FileEdit[], dryRun?: boolean): Promise<EditResult> {
@@ -489,7 +489,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
         message: `Applied ${edits.length} edits successfully`
       };
     }
-    return await globalThis.local__filesystem__edit_file({ path, edits, dryRun });
+    return await (globalThis as any).local__filesystem__edit_file({ path, edits, dryRun });
   }
 
   async createDirectory(path: string): Promise<void> {
@@ -497,7 +497,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
       console.log(`📁 [TEST MODE] Creating directory: ${path}`);
       return;
     }
-    await globalThis.local__filesystem__create_directory({ path });
+    await (globalThis as any).local__filesystem__create_directory({ path });
   }
 
   async listDirectory(path: string): Promise<DirectoryListing> {
@@ -512,7 +512,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
         ]
       };
     }
-    return await globalThis.local__filesystem__list_directory({ path });
+    return await (globalThis as any).local__filesystem__list_directory({ path });
   }
 
   async directoryTree(path: string): Promise<DirectoryTree> {
@@ -529,7 +529,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
         }
       };
     }
-    return await globalThis.local__filesystem__directory_tree({ path });
+    return await (globalThis as any).local__filesystem__directory_tree({ path });
   }
 
   async moveFile(source: string, destination: string): Promise<void> {
@@ -537,7 +537,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
       console.log(`📁 [TEST MODE] Moving file: ${source} → ${destination}`);
       return;
     }
-    await globalThis.local__filesystem__move_file({ source, destination });
+    await (globalThis as any).local__filesystem__move_file({ source, destination });
   }
 
   async searchFiles(path: string, pattern: string, excludePatterns?: string[]): Promise<string[]> {
@@ -545,7 +545,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
       console.log(`📁 [TEST MODE] Searching files in ${path} for pattern: ${pattern}`);
       return [`${path}/mock-result1.ts`, `${path}/mock-result2.ts`];
     }
-    const result = await globalThis.local__filesystem__search_files({ path, pattern, excludePatterns });
+    const result = await (globalThis as any).local__filesystem__search_files({ path, pattern, excludePatterns });
     return result.files || [];
   }
 
@@ -560,7 +560,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
         permissions: '644'
       };
     }
-    return await globalThis.local__filesystem__get_file_info({ path });
+    return await (globalThis as any).local__filesystem__get_file_info({ path });
   }
 
   async listAllowedDirectories(): Promise<string[]> {
@@ -568,7 +568,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
       console.log(`📁 [TEST MODE] Listing allowed directories`);
       return ['/Users/Luther/RiderProjects', '/tmp'];
     }
-    const result = await globalThis.local__filesystem__list_allowed_directories({});
+    const result = await (globalThis as any).local__filesystem__list_allowed_directories({});
     return result.directories || [];
   }
 }
@@ -700,8 +700,8 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
     }
     
     const mcpFunction = this.database === 'platform' 
-      ? globalThis.local__postgres_platform__query
-      : globalThis.local__postgres_analytics__query;
+      ? (globalThis as any).local__postgres_platform__query
+      : (globalThis as any).local__postgres_analytics__query;
     
     return await mcpFunction({ sql, params });
   }

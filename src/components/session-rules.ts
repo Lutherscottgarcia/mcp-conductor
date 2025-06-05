@@ -50,7 +50,7 @@ export class SessionRulesEngine implements RuleEngine {
       updatedAt: new Date(),
       usageCount: 0,
       violationCount: 0,
-      effectiveness: rule.effectiveness // This is optional, so undefined is fine
+      ...(rule.effectiveness !== undefined && { effectiveness: rule.effectiveness })
     };
 
     // Store in Memory MCP
@@ -379,7 +379,7 @@ export class SessionRulesEngine implements RuleEngine {
       updatedAt: new Date(), // TODO: Parse from metadata
       usageCount,
       violationCount,
-      effectiveness // This can be undefined
+      ...(effectiveness !== undefined && { effectiveness })
     };
   }
 
@@ -534,10 +534,12 @@ export class SessionRulesEngine implements RuleEngine {
     
     for (let i = 0; i < rules.length; i++) {
       for (let j = i + 1; j < rules.length; j++) {
-        if (rules[i] && rules[j]) {
-          const similarity = this.calculateRuleSimilarity(rules[i], rules[j]);
+        const rule1 = rules[i];
+        const rule2 = rules[j];
+        if (rule1 && rule2) {
+          const similarity = this.calculateRuleSimilarity(rule1, rule2);
           if (similarity > 0.8) { // 80% similarity threshold
-            redundantPairs.push([rules[i], rules[j]]);
+            redundantPairs.push([rule1, rule2]);
           }
         }
       }

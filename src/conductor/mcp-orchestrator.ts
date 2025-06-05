@@ -17,7 +17,7 @@ import type {
   ReconstructedContext
 } from '@/types/orchestration-types.js';
 import type { SessionRule, RuleEnforcementResult, ProposedAction } from '@/types/rule-types.js';
-import type { MCPType, MCPHealth, GitStatus } from '@/types/shared-types.js';
+import type { MCPType, MCPHealth } from '@/types/shared-types.js';
 import type {
   ProjectIntelligence,
   ProjectStructure,
@@ -85,11 +85,11 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
         branch: 'unknown', 
         ahead: 0, 
         behind: 0, 
-        staged: [], 
-        modified: [], 
-        untracked: [], 
-        conflicted: [] 
-      }) as GitStatus,
+        staged: 0, 
+        modified: 0, 
+        untracked: 0, 
+        conflicted: 0 
+      }),
       databaseSessions: this.extractValue(databaseSessions, []),
       coordinationHealth: this.assessCoordinationHealth(healthStatus)
     };

@@ -53,14 +53,16 @@
   "files": [
     "dist/**/*",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/**/*",
+    "install.sh"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/luther-garcia/conversation-continuity-mcp.git"
+    "url": "https://github.com/lutherscottgarcia/mcp-conductor.git"
   },
   "bugs": {
-    "url": "https://github.com/luther-garcia/conversation-continuity-mcp/issues"
+    "url": "https://github.com/lutherscottgarcia/mcp-conductor/issues"
   },
-  "homepage": "https://github.com/luther-garcia/conversation-continuity-mcp#readme"
+  "homepage": "https://github.com/lutherscottgarcia/mcp-conductor#readme"
 }

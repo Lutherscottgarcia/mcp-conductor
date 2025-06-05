@@ -81,7 +81,15 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       memoryEntities: this.extractValue(memoryEntitiesCount, 0),
       claudepointCheckpoints: this.extractValue(claudepointCheckpoints, []).map(cp => cp.id),
       filesystemActivity: this.extractValue(filesystemActivity, []),
-      gitStatus: this.extractValue(gitStatus, { branch: 'unknown', ahead: 0, behind: 0, staged: 0, modified: 0, untracked: 0, conflicted: 0 }),
+      gitStatus: this.extractValue(gitStatus, { 
+        branch: 'unknown', 
+        ahead: 0, 
+        behind: 0, 
+        staged: [], 
+        modified: [], 
+        untracked: [], 
+        conflicted: [] 
+      }) as GitStatus,
       databaseSessions: this.extractValue(databaseSessions, []),
       coordinationHealth: this.assessCoordinationHealth(healthStatus)
     };
@@ -222,7 +230,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       databaseState: this.extractValue(databaseState, null),
       completeness,
       accuracy: completeness, // Simplified - in real implementation, would check data integrity
-      missingElements,
+      missingElements: missingElements.filter((element): element is string => element !== undefined),
       reconstructionTime: Date.now() - startTime
     };
 
@@ -239,7 +247,14 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     const startTime = Date.now();
     const clients = await this.clientFactory.getAllClients();
     const conflicts: any[] = [];
-    const mcpResults: Record<MCPType, any> = {};
+    const mcpResults: Record<MCPType, any> = {
+      memory: null,
+      claudepoint: null,
+      filesystem: null,
+      git: null,
+      'database-platform': null,
+      'database-analytics': null
+    };
 
     console.log(`🔄 Starting cross-MCP synchronization`);
 

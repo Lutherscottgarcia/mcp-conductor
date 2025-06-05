@@ -18,7 +18,7 @@ import { SessionRulesEngine } from '@/components/session-rules.js';
 import type { MCPClientConfig } from '@/types/orchestration-types.js';
 import type { ProposedAction } from '@/types/rule-types.js';
 import type { MCPType } from '@/types/shared-types.js';
-import type { ProjectIntelligence } from '@/types/project-intelligence-types.js';
+import type { ProjectIntelligence, ProjectChange } from '@/types/project-intelligence-types.js';
 
 // Global types are automatically included via global.d.ts
 
@@ -1139,7 +1139,7 @@ ${updateResult.invalidated_sections.length > 0 ? `
 
 ${changes.length > 0 ? `
 🔍 **Processed Changes**:
-${changes.map(change => `• ${change.type}: ${change.path} (${change.magnitude})`).join('\n')}
+${changes.map((change: ProjectChange) => `• ${change.type}: ${change.path} (${change.magnitude})`).join('\n')}
 ` : '🔍 **Auto-detected changes** and applied updates'}
 
 ${improvementText}
@@ -1298,7 +1298,7 @@ ${improvementText}
     console.log('🎭 Initializing Conversation Continuity MCP Server...');
     
     // Check if we're in test mode
-    const testMode = !globalThis.local__memory__read_graph || process.env.MCP_TEST_MODE === 'true';
+    const testMode = !(globalThis as any).local__memory__read_graph || process.env.MCP_TEST_MODE === 'true';
     if (testMode) {
       console.log('🧪 [TEST MODE] Running with mock MCP implementations');
       console.log('📝 [TEST MODE] No actual MCP connections will be made');

@@ -390,8 +390,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         name: options.name || 'Test Checkpoint',
         description: options.description || 'Test checkpoint',
         createdAt: new Date(),
-        files: 42,
-        size: '1.2MB'
+        fileCount: 42
       };
     }
     return await globalThis.local__claudepoint__create_checkpoint(options);
@@ -411,9 +410,8 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       console.log(`🔄 [TEST MODE] Restoring checkpoint: ${checkpoint} (dry run: ${dryRun})`);
       return {
         success: true,
-        restoredFiles: 25,
-        skippedFiles: 0,
-        duration: '1.2s'
+        message: 'Test checkpoint restored successfully',
+        filesRestored: 25
       };
     }
     return await globalThis.local__claudepoint__restore_checkpoint({ checkpoint, dry_run: dryRun });
@@ -432,8 +430,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       console.log(`🔄 [TEST MODE] Getting changelog`);
       return [
         {
-          timestamp: new Date(),
-          action: 'TEST_MODE',
+          action_type: 'TEST_MODE',
           description: 'Mock changelog entry for testing',
           details: 'Running in test mode with mock implementations'
         }
@@ -488,8 +485,8 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
       console.log(`📁 [TEST MODE] Editing file: ${path} (${edits.length} edits, dry run: ${dryRun})`);
       return {
         success: true,
-        changesApplied: edits.length,
-        diff: 'Mock diff output'
+        diff: 'Mock diff output',
+        message: `Applied ${edits.length} edits successfully`
       };
     }
     return await globalThis.local__filesystem__edit_file({ path, edits, dryRun });
@@ -507,7 +504,6 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
     if (isTestMode()) {
       console.log(`📁 [TEST MODE] Listing directory: ${path}`);
       return {
-        path,
         items: [
           { name: 'src', type: 'directory' },
           { name: 'docs', type: 'directory' },
@@ -523,12 +519,14 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
     if (isTestMode()) {
       console.log(`📁 [TEST MODE] Getting directory tree: ${path}`);
       return {
-        name: path,
-        type: 'directory',
-        children: [
-          { name: 'src', type: 'directory', children: [] },
-          { name: 'docs', type: 'directory', children: [] }
-        ]
+        tree: {
+          name: path,
+          type: 'directory',
+          children: [
+            { name: 'src', type: 'directory', children: [] },
+            { name: 'docs', type: 'directory', children: [] }
+          ]
+        }
       };
     }
     return await globalThis.local__filesystem__directory_tree({ path });
@@ -558,7 +556,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
         path,
         size: 1024,
         lastModified: new Date(),
-        isDirectory: false,
+        type: 'file',
         permissions: '644'
       };
     }
@@ -583,24 +581,24 @@ class GitClientAdapter implements GitMCPClient {
       console.log('🔀 [TEST MODE] Getting git status');
       return {
         branch: 'main',
-        modified: 2,
-        staged: 0,
-        untracked: 1,
         ahead: 0,
         behind: 0,
-        clean: false
+        modified: ['src/test.ts', 'README.md'],
+        staged: [],
+        untracked: ['temp.log'],
+        conflicted: []
       };
     }
     // Git MCP integration will be implemented when Git MCP SDK is available
     console.warn('Git MCP integration pending - using mock data');
     return {
       branch: 'main',
-      modified: 0,
-      staged: 0,
-      untracked: 0,
       ahead: 0,
       behind: 0,
-      clean: true
+      modified: [],
+      staged: [],
+      untracked: [],
+      conflicted: []
     };
   }
 
@@ -645,8 +643,7 @@ class GitClientAdapter implements GitMCPClient {
           hash: 'abc123',
           message: 'Test commit message',
           author: 'Test Author',
-          date: new Date(),
-          files: ['src/index.ts']
+          date: new Date()
         }
       ];
     }
@@ -714,15 +711,28 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
       console.log(`🗄️ [TEST MODE] Getting database schema`);
       return {
         tables: [
-          { name: 'users', columns: ['id', 'name', 'email'] },
-          { name: 'projects', columns: ['id', 'name', 'description'] }
+          { 
+            name: 'users', 
+            columns: [
+              { name: 'id', type: 'integer', nullable: false, primaryKey: true },
+              { name: 'name', type: 'varchar', nullable: false },
+              { name: 'email', type: 'varchar', nullable: false }
+            ]
+          },
+          { 
+            name: 'projects', 
+            columns: [
+              { name: 'id', type: 'integer', nullable: false, primaryKey: true },
+              { name: 'name', type: 'varchar', nullable: false },
+              { name: 'description', type: 'text', nullable: true }
+            ]
+          }
         ],
-        views: [],
-        indexes: []
+        views: []
       };
     }
     console.warn('Database schema introspection pending - using mock schema');
-    return { tables: [], views: [], indexes: [] };
+    return { tables: [], views: [] };
   }
 
   async beginTransaction(): Promise<TransactionClient> {

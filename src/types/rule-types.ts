@@ -145,7 +145,7 @@ export interface RuleEnforcementEntity {
 export const LUTHER_SESSION_RULES: Partial<SessionRule>[] = [
   {
     id: 'approval_required',
-    rule: 'Always check with me and wait until I\'m ready before creating or committing new artifacts and changes',
+    rule: 'Always check with me and wait until I\'m ready before thundering off wielding the powers of creation in my filesystem all willy nilly',
     type: 'approval',
     priority: 1,
     scope: 'user',

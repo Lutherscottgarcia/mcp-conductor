@@ -27,6 +27,7 @@ class ConversationContinuityServer {
   private orchestrator!: ConversationContinuityOrchestrator;
   private rulesEngine!: SessionRulesEngine;
   private clientFactory!: MCPClientFactory;
+  private currentSession = { id: `session_${Date.now()}` };
 
   constructor() {
     this.server = new Server(
@@ -553,7 +554,7 @@ ${rulesList}
           text: `🎯 Luther's session rules initialized successfully!
 
 The following rules are now active:
-1. **Approval Required**: Always check before creating artifacts/changes
+1. **Approval Required**: Always check before thundering off wielding the powers of creation all willy nilly
 2. **Artifact Display**: Always use right panel for completed work
 3. **Architecture Check**: Check existing patterns before new implementations  
 4. **File Paths**: Include complete paths in all artifacts
@@ -1275,6 +1276,7 @@ ${improvementText}
     } catch (error) {
       console.warn('Failed to log intelligence event:', error);
       // Don't throw - logging failure shouldn't break the main operation
+      // In test mode, database logging may not work
     }
   }
 
@@ -1294,6 +1296,13 @@ ${improvementText}
 
   async initialize() {
     console.log('🎭 Initializing Conversation Continuity MCP Server...');
+    
+    // Check if we're in test mode
+    const testMode = !globalThis.local__memory__read_graph || process.env.MCP_TEST_MODE === 'true';
+    if (testMode) {
+      console.log('🧪 [TEST MODE] Running with mock MCP implementations');
+      console.log('📝 [TEST MODE] No actual MCP connections will be made');
+    }
 
     // Create MCP client factory
     const mcpConfigs: MCPClientConfig[] = [

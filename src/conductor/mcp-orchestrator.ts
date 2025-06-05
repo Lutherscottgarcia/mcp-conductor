@@ -81,15 +81,15 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       memoryEntities: this.extractValue(memoryEntitiesCount, 0),
       claudepointCheckpoints: this.extractValue(claudepointCheckpoints, []).map(cp => cp.id),
       filesystemActivity: this.extractValue(filesystemActivity, []),
-      gitStatus: this.extractValue(gitStatus, { 
+      gitStatus: this.convertGitStatusToSummary(this.extractValue(gitStatus, { 
         branch: 'unknown', 
         ahead: 0, 
         behind: 0, 
-        staged: 0, 
-        modified: 0, 
-        untracked: 0, 
-        conflicted: 0 
-      }),
+        staged: [], 
+        modified: [], 
+        untracked: [], 
+        conflicted: [] 
+      })),
       databaseSessions: this.extractValue(databaseSessions, []),
       coordinationHealth: this.assessCoordinationHealth(healthStatus)
     };
@@ -450,6 +450,19 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
 
   private extractValue<T>(result: PromiseSettledResult<T>, defaultValue: T): T {
     return result.status === 'fulfilled' ? result.value : defaultValue;
+  }
+
+  private convertGitStatusToSummary(gitStatus: any): any {
+    // Convert GitStatus (arrays) to GitStatusSummary (counts)
+    return {
+      branch: gitStatus.branch,
+      ahead: gitStatus.ahead,
+      behind: gitStatus.behind,
+      staged: Array.isArray(gitStatus.staged) ? gitStatus.staged.length : gitStatus.staged,
+      modified: Array.isArray(gitStatus.modified) ? gitStatus.modified.length : gitStatus.modified,
+      untracked: Array.isArray(gitStatus.untracked) ? gitStatus.untracked.length : gitStatus.untracked,
+      conflicted: Array.isArray(gitStatus.conflicted) ? gitStatus.conflicted.length : gitStatus.conflicted
+    };
   }
 
   private async getMemoryEntitiesCount(memoryClient: any): Promise<number> {

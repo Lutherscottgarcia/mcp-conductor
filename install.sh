@@ -203,11 +203,11 @@ EOF
 if [ -f "$CLAUDE_CONFIG" ]; then
     echo -e "${INFO} Merging with existing Claude configuration..."
     # Use Node.js to merge JSON configurations
-    node << 'MERGE_SCRIPT'
+    node << 'MERGE_SCRIPT' "$CLAUDE_CONFIG"
 const fs = require('fs');
 const path = require('path');
 
-const configPath = process.argv[1];
+const configPath = process.argv[2];
 const newConfigPath = '/tmp/mcp_config.json';
 
 let existingConfig = {};
@@ -232,7 +232,7 @@ Object.assign(existingConfig.mcpServers, newConfig.mcpServers);
 // Write merged config
 fs.writeFileSync(configPath, JSON.stringify(existingConfig, null, 2));
 console.log('✅ Configuration merged successfully');
-MERGE_SCRIPT "$CLAUDE_CONFIG"
+MERGE_SCRIPT
 else
     echo -e "${INFO} Creating new Claude configuration..."
     cp /tmp/mcp_config.json "$CLAUDE_CONFIG"

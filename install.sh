@@ -118,23 +118,23 @@ if [ -d "$MCP_DIR" ]; then
     echo -e "${WARNING} MCP Conductor already exists at: $MCP_DIR"
     echo -e "${INFO} Updating existing installation..."
     cd "$MCP_DIR"
+    git pull origin main 2>/dev/null || echo -e "${INFO} Not a git repository, using existing files"
     npm install
+    npm run build
 else
     echo -e "${INFO} Installing MCP Conductor to: $MCP_DIR"
     mkdir -p "$(dirname "$MCP_DIR")"
     
-    # For development - copy from current location
-    # In production, this would clone from GitHub
-    if [ -d "/Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity" ]; then
-        cp -r "/Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity" "$MCP_DIR"
-        cd "$MCP_DIR"
-        npm install
-        npm run build
-    else
-        echo -e "${ERROR} Could not find MCP Conductor source"
-        echo -e "${INFO} This will be replaced with: git clone https://github.com/lutherscottgarcia/mcp-conductor.git"
-        exit 1
-    fi
+    # Clone from GitHub for public users
+    echo -e "${INFO} Cloning MCP Conductor from GitHub..."
+    git clone https://github.com/Lutherscottgarcia/mcp-conductor.git "$MCP_DIR"
+    cd "$MCP_DIR"
+    
+    echo -e "${INFO} Installing dependencies..."
+    npm install
+    
+    echo -e "${INFO} Building TypeScript..."
+    npm run build
 fi
 
 echo -e "${SUCCESS} MCP Conductor installed successfully"

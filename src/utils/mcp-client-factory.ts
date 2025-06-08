@@ -172,8 +172,132 @@ export class MCPClientFactory {
     return client;
   }
 
-  // ===== UNIFIED CLIENT ACCESS =====
+  // ===== AVAILABILITY CHECKING =====
 
+  hasClientConfig(mcpType: MCPType): boolean {
+    return this.configs.has(mcpType);
+  }
+
+  getAvailableMCPs(): MCPType[] {
+    return Array.from(this.configs.keys());
+  }
+
+  // ===== SAFE CLIENT CREATION =====
+
+  async createMemoryClientSafe(): Promise<MemoryMCPClient | null> {
+    if (!this.hasClientConfig('memory')) {
+      // console.log('Memory MCP not configured - using null client');
+      return null;
+    }
+    try {
+      return await this.createMemoryClient();
+    } catch (error) {
+      console.warn('Memory MCP failed to initialize:', error);
+      return null;
+    }
+  }
+
+  async createClaudepointClientSafe(): Promise<ClaudepointMCPClient | null> {
+    if (!this.hasClientConfig('claudepoint')) {
+      // console.log('Claudepoint MCP not configured - using null client');
+      return null;
+    }
+    try {
+      return await this.createClaudepointClient();
+    } catch (error) {
+      console.warn('Claudepoint MCP failed to initialize:', error);
+      return null;
+    }
+  }
+
+  async createFilesystemClientSafe(): Promise<FilesystemMCPClient | null> {
+    if (!this.hasClientConfig('filesystem')) {
+      // console.log('Filesystem MCP not configured - using null client');
+      return null;
+    }
+    try {
+      return await this.createFilesystemClient();
+    } catch (error) {
+      console.warn('Filesystem MCP failed to initialize:', error);
+      return null;
+    }
+  }
+
+  async createGitClientSafe(): Promise<GitMCPClient | null> {
+    if (!this.hasClientConfig('git')) {
+      // console.log('Git MCP not configured - using null client');
+      return null;
+    }
+    try {
+      return await this.createGitClient();
+    } catch (error) {
+      console.warn('Git MCP failed to initialize:', error);
+      return null;
+    }
+  }
+
+  async createDatabaseClientSafe(database: 'platform' | 'analytics'): Promise<DatabaseMCPClient | null> {
+    const mcpType: MCPType = database === 'platform' ? 'database-platform' : 'database-analytics';
+    
+    if (!this.hasClientConfig(mcpType)) {
+      // console.log(`Database MCP (${database}) not configured - using null client`);
+      return null;
+    }
+    try {
+      return await this.createDatabaseClient(database);
+    } catch (error) {
+      console.warn(`Database MCP (${database}) failed to initialize:`, error);
+      return null;
+    }
+  }
+
+  // ===== FLEXIBLE CLIENT ACCESS =====
+
+  async getAllAvailableClients(): Promise<{
+    memory: MemoryMCPClient | null;
+    claudepoint: ClaudepointMCPClient | null;
+    filesystem: FilesystemMCPClient | null;
+    git: GitMCPClient | null;
+    databasePlatform: DatabaseMCPClient | null;
+    databaseAnalytics: DatabaseMCPClient | null;
+    availableMCPs: MCPType[];
+  }> {
+    // console.log(`Initializing available MCPs: ${this.getAvailableMCPs().join(', ')}`);
+    
+    const [memory, claudepoint, filesystem, git, databasePlatform, databaseAnalytics] = 
+      await Promise.all([
+        this.createMemoryClientSafe(),
+        this.createClaudepointClientSafe(),
+        this.createFilesystemClientSafe(),
+        this.createGitClientSafe(),
+        this.createDatabaseClientSafe('platform'),
+        this.createDatabaseClientSafe('analytics')
+      ]);
+
+    const successfullyInitialized = [
+      memory && 'memory',
+      claudepoint && 'claudepoint', 
+      filesystem && 'filesystem',
+      git && 'git',
+      databasePlatform && 'database-platform',
+      databaseAnalytics && 'database-analytics'
+    ].filter(Boolean) as MCPType[];
+
+    // console.log(`Successfully initialized MCPs: ${successfullyInitialized.join(', ')}`);
+
+    return {
+      memory,
+      claudepoint,
+      filesystem,
+      git,
+      databasePlatform,
+      databaseAnalytics,
+      availableMCPs: successfullyInitialized
+    };
+  }
+
+  // ===== LEGACY SUPPORT =====
+  // Keep the old method for backward compatibility, but now it's more flexible
   async getAllClients(): Promise<{
     memory: MemoryMCPClient;
     claudepoint: ClaudepointMCPClient;
@@ -182,6 +306,8 @@ export class MCPClientFactory {
     databasePlatform: DatabaseMCPClient;
     databaseAnalytics: DatabaseMCPClient;
   }> {
+    console.warn('WARNING: getAllClients() is deprecated - use getAllAvailableClients() for graceful handling');
+    
     const [memory, claudepoint, filesystem, git, databasePlatform, databaseAnalytics] = 
       await Promise.all([
         this.createMemoryClient(),
@@ -205,6 +331,7 @@ export class MCPClientFactory {
   // ===== HEALTH MONITORING =====
 
   async checkAllMCPHealth(): Promise<Map<MCPType, MCPHealth>> {
+    // Only check health for MCPs that are configured and have clients
     const healthChecks = Array.from(this.clients.entries()).map(async ([mcpType, client]) => {
       try {
         const startTime = Date.now();
@@ -225,6 +352,17 @@ export class MCPClientFactory {
       }
     });
 
+    // Mark unconfigured MCPs as 'not_configured'
+    const allMCPTypes: MCPType[] = ['memory', 'claudepoint', 'filesystem', 'git', 'database-platform', 'database-analytics'];
+    for (const mcpType of allMCPTypes) {
+      if (!this.hasClientConfig(mcpType)) {
+        this.healthStatus.set(mcpType, {
+          status: 'not_configured',
+          lastChecked: new Date()
+        });
+      }
+    }
+
     await Promise.allSettled(healthChecks);
     return new Map(this.healthStatus);
   }
@@ -232,7 +370,7 @@ export class MCPClientFactory {
   getHealthStatus(mcpType?: MCPType): MCPHealth | Map<MCPType, MCPHealth> {
     if (mcpType) {
       return this.healthStatus.get(mcpType) || {
-        status: 'offline',
+        status: this.hasClientConfig(mcpType) ? 'offline' : 'not_configured',
         lastChecked: new Date()
       };
     }
@@ -293,7 +431,7 @@ export class MCPClientFactory {
 class MemoryClientAdapter implements MemoryMCPClient {
   async createEntities(entities: MemoryEntity[]): Promise<void> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Creating ${entities.length} entities`);
+      // console.log(`[TEST MODE] Creating ${entities.length} entities`);
       return;
     }
     await (globalThis as any).local__memory__create_entities({ entities });
@@ -301,7 +439,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async addObservations(observations: MemoryObservation[]): Promise<void> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Adding observations to ${observations.length} entities`);
+      // console.log(`[TEST MODE] Adding observations to ${observations.length} entities`);
       return;
     }
     await (globalThis as any).local__memory__add_observations({ observations });
@@ -309,7 +447,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async searchNodes(query: string): Promise<MemoryNode[]> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Searching nodes: "${query}"`);
+      // console.log(`[TEST MODE] Searching nodes: "${query}"`);
       return [];
     }
     const result = await (globalThis as any).local__memory__search_nodes({ query });
@@ -318,7 +456,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async openNodes(names: string[]): Promise<MemoryNode[]> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Opening ${names.length} nodes`);
+      // console.log(`[TEST MODE] Opening ${names.length} nodes`);
       return names.map(name => ({
         name,
         entityType: 'test_entity',
@@ -331,7 +469,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async createRelations(relations: MemoryRelation[]): Promise<void> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Creating ${relations.length} relations`);
+      // console.log(`[TEST MODE] Creating ${relations.length} relations`);
       return;
     }
     await (globalThis as any).local__memory__create_relations({ relations });
@@ -339,7 +477,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async deleteEntities(entityNames: string[]): Promise<void> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Deleting ${entityNames.length} entities`);
+      // console.log(`[TEST MODE] Deleting ${entityNames.length} entities`);
       return;
     }
     await (globalThis as any).local__memory__delete_entities({ entityNames });
@@ -347,7 +485,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async deleteObservations(deletions: MemoryObservationDeletion[]): Promise<void> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Deleting observations from ${deletions.length} entities`);
+      // console.log(`[TEST MODE] Deleting observations from ${deletions.length} entities`);
       return;
     }
     await (globalThis as any).local__memory__delete_observations({ deletions });
@@ -355,7 +493,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async deleteRelations(relations: MemoryRelation[]): Promise<void> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Deleting ${relations.length} relations`);
+      // console.log(`[TEST MODE] Deleting ${relations.length} relations`);
       return;
     }
     await (globalThis as any).local__memory__delete_relations({ relations });
@@ -384,7 +522,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
 
   async createCheckpoint(options: CheckpointOptions): Promise<Checkpoint> {
     if (isTestMode()) {
-      console.log(`🔄 [TEST MODE] Creating checkpoint: ${options.description}`);
+      // console.log(`[TEST MODE] Creating checkpoint: ${options.description}`);
       return {
         id: `test_checkpoint_${Date.now()}`,
         name: options.name || 'Test Checkpoint',
@@ -398,7 +536,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
 
   async listCheckpoints(): Promise<Checkpoint[]> {
     if (isTestMode()) {
-      console.log(`🔄 [TEST MODE] Listing checkpoints`);
+      // console.log(`[TEST MODE] Listing checkpoints`);
       return [];
     }
     const result = await (globalThis as any).local__claudepoint__list_checkpoints({});
@@ -407,7 +545,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
 
   async restoreCheckpoint(checkpoint: string, dryRun?: boolean): Promise<RestoreResult> {
     if (isTestMode()) {
-      console.log(`🔄 [TEST MODE] Restoring checkpoint: ${checkpoint} (dry run: ${dryRun})`);
+      // console.log(`[TEST MODE] Restoring checkpoint: ${checkpoint} (dry run: ${dryRun})`);
       return {
         success: true,
         message: 'Test checkpoint restored successfully',
@@ -419,7 +557,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
 
   async setupClaudepoint(): Promise<void> {
     if (isTestMode()) {
-      console.log(`🔄 [TEST MODE] Setting up Claudepoint`);
+      // console.log(`[TEST MODE] Setting up Claudepoint`);
       return;
     }
     await (globalThis as any).local__claudepoint__setup_claudepoint({});
@@ -427,7 +565,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
 
   async getChangelog(): Promise<ChangelogEntry[]> {
     if (isTestMode()) {
-      console.log(`🔄 [TEST MODE] Getting changelog`);
+      // console.log(`[TEST MODE] Getting changelog`);
       return [
         {
           action_type: 'TEST_MODE',
@@ -442,7 +580,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
 
   async setChangelog(entry: ChangelogEntry): Promise<void> {
     if (isTestMode()) {
-      console.log(`🔄 [TEST MODE] Setting changelog entry: ${entry.description}`);
+      // console.log(`[TEST MODE] Setting changelog entry: ${entry.description}`);
       return;
     }
     await (globalThis as any).local__claudepoint__set_changelog(entry);
@@ -452,7 +590,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
 class FilesystemClientAdapter implements FilesystemMCPClient {
   async readFile(path: string): Promise<string> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Reading file: ${path}`);
+      // console.log(`[TEST MODE] Reading file: ${path}`);
       return `// Mock file content for ${path}\n// This is a test mode implementation\n`;
     }
     const result = await (globalThis as any).local__filesystem__read_file({ path });
@@ -461,7 +599,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async readMultipleFiles(paths: string[]): Promise<FileReadResult[]> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Reading ${paths.length} files`);
+      // console.log(`[TEST MODE] Reading ${paths.length} files`);
       return paths.map(path => ({
         path,
         content: `Mock content for ${path}`,
@@ -474,7 +612,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async writeFile(path: string, content: string): Promise<void> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Writing file: ${path} (${content.length} chars)`);
+      // console.log(`[TEST MODE] Writing file: ${path} (${content.length} chars)`);
       return;
     }
     await (globalThis as any).local__filesystem__write_file({ path, content });
@@ -482,7 +620,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async editFile(path: string, edits: FileEdit[], dryRun?: boolean): Promise<EditResult> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Editing file: ${path} (${edits.length} edits, dry run: ${dryRun})`);
+      // console.log(`[TEST MODE] Editing file: ${path} (${edits.length} edits, dry run: ${dryRun})`);
       return {
         success: true,
         diff: 'Mock diff output',
@@ -494,7 +632,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async createDirectory(path: string): Promise<void> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Creating directory: ${path}`);
+      // console.log(`[TEST MODE] Creating directory: ${path}`);
       return;
     }
     await (globalThis as any).local__filesystem__create_directory({ path });
@@ -502,7 +640,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async listDirectory(path: string): Promise<DirectoryListing> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Listing directory: ${path}`);
+      // console.log(`[TEST MODE] Listing directory: ${path}`);
       return {
         items: [
           { name: 'src', type: 'directory' },
@@ -517,7 +655,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async directoryTree(path: string): Promise<DirectoryTree> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Getting directory tree: ${path}`);
+      // console.log(`[TEST MODE] Getting directory tree: ${path}`);
       return {
         tree: {
           name: path,
@@ -534,7 +672,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async moveFile(source: string, destination: string): Promise<void> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Moving file: ${source} → ${destination}`);
+      // console.log(`[TEST MODE] Moving file: ${source} -> ${destination}`);
       return;
     }
     await (globalThis as any).local__filesystem__move_file({ source, destination });
@@ -542,7 +680,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async searchFiles(path: string, pattern: string, excludePatterns?: string[]): Promise<string[]> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Searching files in ${path} for pattern: ${pattern}`);
+      // console.log(`[TEST MODE] Searching files in ${path} for pattern: ${pattern}`);
       return [`${path}/mock-result1.ts`, `${path}/mock-result2.ts`];
     }
     const result = await (globalThis as any).local__filesystem__search_files({ path, pattern, excludePatterns });
@@ -551,7 +689,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async getFileInfo(path: string): Promise<FileMetadata> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Getting file info: ${path}`);
+      // console.log(`[TEST MODE] Getting file info: ${path}`);
       return {
         path,
         size: 1024,
@@ -565,7 +703,7 @@ class FilesystemClientAdapter implements FilesystemMCPClient {
 
   async listAllowedDirectories(): Promise<string[]> {
     if (isTestMode()) {
-      console.log(`📁 [TEST MODE] Listing allowed directories`);
+      // console.log(`[TEST MODE] Listing allowed directories`);
       return ['/Users/Luther/RiderProjects', '/tmp'];
     }
     const result = await (globalThis as any).local__filesystem__list_allowed_directories({});
@@ -578,7 +716,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async status(): Promise<GitStatus> {
     if (isTestMode()) {
-      console.log('🔀 [TEST MODE] Getting git status');
+      // console.log('[TEST MODE] Getting git status');
       return {
         branch: 'main',
         ahead: 0,
@@ -604,7 +742,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async add(files: string[]): Promise<void> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Adding ${files.length} files to git`);
+      // console.log(`[TEST MODE] Adding ${files.length} files to git`);
       return;
     }
     console.warn('Git MCP integration pending - add operation simulated');
@@ -612,7 +750,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async commit(message: string): Promise<string> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Committing with message: ${message}`);
+      // console.log(`[TEST MODE] Committing with message: ${message}`);
       return `test_commit_${Date.now()}`;
     }
     console.warn('Git MCP integration pending - commit operation simulated');
@@ -621,7 +759,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async push(remote?: string, branch?: string): Promise<void> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Pushing to ${remote || 'origin'}/${branch || 'main'}`);
+      // console.log(`[TEST MODE] Pushing to ${remote || 'origin'}/${branch || 'main'}`);
       return;
     }
     console.warn('Git MCP integration pending - push operation simulated');
@@ -629,7 +767,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async pull(remote?: string, branch?: string): Promise<void> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Pulling from ${remote || 'origin'}/${branch || 'main'}`);
+      // console.log(`[TEST MODE] Pulling from ${remote || 'origin'}/${branch || 'main'}`);
       return;
     }
     console.warn('Git MCP integration pending - pull operation simulated');
@@ -637,7 +775,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async log(options?: GitLogOptions): Promise<GitCommit[]> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Getting git log`);
+      // console.log(`[TEST MODE] Getting git log`);
       return [
         {
           hash: 'abc123',
@@ -653,7 +791,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async diff(options?: GitDiffOptions): Promise<string> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Getting git diff`);
+      // console.log(`[TEST MODE] Getting git diff`);
       return 'diff --git a/src/index.ts b/src/index.ts\n+// Mock diff content';
     }
     console.warn('Git MCP integration pending - using mock diff');
@@ -662,7 +800,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async branch(action: 'list' | 'create' | 'delete', name?: string): Promise<GitBranch[]> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Branch operation: ${action} ${name || ''}`);
+      // console.log(`[TEST MODE] Branch operation: ${action} ${name || ''}`);
       return [
         { name: 'main', current: true, remote: 'origin/main' },
         { name: 'develop', current: false, remote: 'origin/develop' }
@@ -674,7 +812,7 @@ class GitClientAdapter implements GitMCPClient {
 
   async checkout(branch: string): Promise<void> {
     if (isTestMode()) {
-      console.log(`🔀 [TEST MODE] Checking out branch: ${branch}`);
+      // console.log(`[TEST MODE] Checking out branch: ${branch}`);
       return;
     }
     console.warn('Git MCP integration pending - checkout operation simulated');
@@ -689,7 +827,7 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
 
   async query(sql: string, params?: any[]): Promise<QueryResult> {
     if (isTestMode()) {
-      console.log(`🗄️ [TEST MODE] Database query: ${sql}`);
+      // console.log(`[TEST MODE] Database query: ${sql}`);
       return {
         rows: [
           { id: 1, name: 'Mock Data', value: 'test' },
@@ -708,7 +846,7 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
 
   async getSchema(): Promise<SchemaInfo> {
     if (isTestMode()) {
-      console.log(`🗄️ [TEST MODE] Getting database schema`);
+      // console.log(`[TEST MODE] Getting database schema`);
       return {
         tables: [
           { 
@@ -737,17 +875,17 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
 
   async beginTransaction(): Promise<TransactionClient> {
     if (isTestMode()) {
-      console.log(`🗄️ [TEST MODE] Beginning database transaction`);
+      // console.log(`[TEST MODE] Beginning database transaction`);
       return {
         query: async (sql: string, params?: any[]) => {
-          console.log(`🗄️ [TEST MODE] Transaction query: ${sql}`);
+          // console.log(`[TEST MODE] Transaction query: ${sql}`);
           return { rows: [], rowCount: 0 };
         },
         commit: async () => {
-          console.log(`🗄️ [TEST MODE] Committing transaction`);
+          // console.log(`[TEST MODE] Committing transaction`);
         },
         rollback: async () => {
-          console.log(`🗄️ [TEST MODE] Rolling back transaction`);
+          // console.log(`[TEST MODE] Rolling back transaction`);
         }
       };
     }
@@ -761,7 +899,7 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
 
   async healthCheck(): Promise<DatabaseHealth> {
     if (isTestMode()) {
-      console.log(`🗄️ [TEST MODE] Database health check`);
+      // console.log(`[TEST MODE] Database health check`);
       return { status: 'healthy', lastChecked: new Date() };
     }
     

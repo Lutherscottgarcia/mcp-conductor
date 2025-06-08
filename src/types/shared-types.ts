@@ -303,7 +303,7 @@ export interface EffectivenessMetrics {
 // ===== HEALTH AND MONITORING TYPES =====
 
 export interface MCPHealth {
-  status: 'online' | 'offline' | 'error';
+  status: 'online' | 'offline' | 'error' | 'not_configured';
   responseTime?: number;
   lastChecked: Date;
   errorMessage?: string;

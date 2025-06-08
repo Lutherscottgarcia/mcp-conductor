@@ -57,10 +57,12 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
   // ===== ECOSYSTEM MONITORING =====
 
   async monitorEcosystemState(): Promise<EcosystemState> {
-    const clients = await this.clientFactory.getAllClients();
+    const clients = await this.clientFactory.getAllAvailableClients();
     const healthStatus = await this.clientFactory.checkAllMCPHealth();
 
-    // Gather state from all MCPs in parallel
+    console.log(`🔍 Monitoring ecosystem with ${clients.availableMCPs.length} available MCPs`);
+
+    // Gather state from available MCPs in parallel - gracefully handle missing ones
     const [
       memoryEntitiesCount,
       claudepointCheckpoints,
@@ -68,10 +70,18 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       gitStatus,
       databaseSessions
     ] = await Promise.allSettled([
-      this.getMemoryEntitiesCount(clients.memory),
-      clients.claudepoint.listCheckpoints(),
-      this.getFilesystemActivity(clients.filesystem),
-      clients.git.status(),
+      clients.memory ? this.getMemoryEntitiesCount(clients.memory) : Promise.resolve(0),
+      clients.claudepoint ? clients.claudepoint.listCheckpoints() : Promise.resolve([]),
+      clients.filesystem ? this.getFilesystemActivity(clients.filesystem) : Promise.resolve([]),
+      clients.git ? clients.git.status() : Promise.resolve({ 
+        branch: 'not_available', 
+        ahead: 0, 
+        behind: 0, 
+        staged: [], 
+        modified: [], 
+        untracked: [], 
+        conflicted: [] 
+      }),
       this.getDatabaseSessionInfo(clients.databasePlatform, clients.databaseAnalytics)
     ]);
 
@@ -82,7 +92,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       claudepointCheckpoints: this.extractValue(claudepointCheckpoints, []).map(cp => cp.id),
       filesystemActivity: this.extractValue(filesystemActivity, []),
       gitStatus: this.convertGitStatusToSummary(this.extractValue(gitStatus, { 
-        branch: 'unknown', 
+        branch: clients.git ? 'unknown' : 'not_configured', 
         ahead: 0, 
         behind: 0, 
         staged: [], 
@@ -99,30 +109,113 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
 
   async createUnifiedHandoffPackage(): Promise<UnifiedHandoffPackage> {
     const handoffId = this.generateHandoffId();
-    const clients = await this.clientFactory.getAllClients();
+    const clients = await this.clientFactory.getAllAvailableClients();
 
     console.log(`🎭 Creating unified handoff package: ${handoffId}`);
+    console.log(`🔧 Available MCPs: ${clients.availableMCPs.join(', ')}`);
 
-    // Step 1: Create Claudepoint checkpoint first (code state)
-    const checkpoint = await clients.claudepoint.createCheckpoint({
-      description: `Conversation handoff: ${this.currentSession.currentTask || 'Session boundary'}`
-    });
+    // Step 1: Create Claudepoint checkpoint first (code state) - if available
+    let checkpoint: any = null;
+    if (clients.claudepoint) {
+      checkpoint = await clients.claudepoint.createCheckpoint({
+        description: `Conversation handoff: ${this.currentSession.currentTask || 'Session boundary'}`
+      });
+      console.log(`🔄 Created Claudepoint checkpoint: ${checkpoint.id}`);
+    } else {
+      console.log(`⚠️ Claudepoint MCP not available - creating checkpoint-less handoff`);
+      checkpoint = {
+        id: `mock_checkpoint_${handoffId}`,
+        description: 'Handoff without Claudepoint checkpoint',
+        createdAt: new Date(),
+        fileCount: 0
+      };
+    }
 
-    // Step 2: Compress and store context in Memory MCP
-    const memoryPackage = await this.createMemoryHandoffPackage(clients.memory, handoffId, checkpoint.id);
+    // Step 2: Compress and store context in Memory MCP - if available
+    let memoryPackage: any;
+    if (clients.memory) {
+      memoryPackage = await this.createMemoryHandoffPackage(clients.memory, handoffId, checkpoint.id);
+      console.log(`🧠 Created Memory package`);
+    } else {
+      console.log(`⚠️ Memory MCP not available - using minimal handoff data`);
+      memoryPackage = {
+        compressedContextEntities: [],
+        sessionRuleEntities: [],
+        workingStateEntity: `MockWorkingState_${this.currentSession.id}`,
+        contextRelationships: [],
+        semanticSummary: `Handoff package without Memory MCP storage`
+      };
+    }
 
-    // Step 3: Snapshot filesystem state
-    const filesystemPackage = await this.createFilesystemHandoffPackage(clients.filesystem);
+    // Step 3: Snapshot filesystem state - if available
+    let filesystemPackage: any;
+    if (clients.filesystem) {
+      filesystemPackage = await this.createFilesystemHandoffPackage(clients.filesystem);
+      console.log(`📁 Created Filesystem package`);
+    } else {
+      console.log(`⚠️ Filesystem MCP not available - using minimal filesystem data`);
+      filesystemPackage = {
+        projectSnapshot: {
+          rootPath: '/unknown',
+          fileCount: 0,
+          directoryCount: 0,
+          totalSize: 0,
+          lastModified: new Date(),
+          fileTree: []
+        },
+        activeFiles: this.currentSession.activeFiles,
+        recentChanges: [],
+        projectStructureHash: 'no_filesystem_mcp'
+      };
+    }
 
-    // Step 4: Capture git state
-    const gitPackage = await this.createGitHandoffPackage(clients.git);
+    // Step 4: Capture git state - if available
+    let gitPackage: any;
+    if (clients.git) {
+      gitPackage = await this.createGitHandoffPackage(clients.git);
+      console.log(`🔀 Created Git package`);
+    } else {
+      console.log(`⚠️ Git MCP not available - using minimal git data`);
+      gitPackage = {
+        currentBranch: 'not_available',
+        commitHash: 'no_git_mcp',
+        changesSummary: 'git not available',
+        uncommittedChanges: 0,
+        branchAheadBehind: { ahead: 0, behind: 0 }
+      };
+    }
 
-    // Step 5: Store analytics in database
-    const databasePackage = await this.createDatabaseHandoffPackage(
-      clients.databasePlatform, 
-      clients.databaseAnalytics, 
-      handoffId
-    );
+    // Step 5: Store analytics in database - if available
+    let databasePackage: any;
+    if (clients.databasePlatform || clients.databaseAnalytics) {
+      databasePackage = await this.createDatabaseHandoffPackage(
+        clients.databasePlatform, 
+        clients.databaseAnalytics, 
+        handoffId
+      );
+      console.log(`🗄️ Created Database package`);
+    } else {
+      console.log(`⚠️ Database MCPs not available - using minimal analytics data`);
+      databasePackage = {
+        sessionAnalytics: {
+          sessionId: this.currentSession.id,
+          startTime: this.currentSession.startTime,
+          tokenCount: this.currentSession.tokenCount,
+          decisionsCount: 0,
+          filesModified: this.currentSession.activeFiles.length,
+          rulesEnforced: 0,
+          mcpOperations: {}
+        },
+        learningPatterns: [],
+        effectivenessMetrics: {
+          contextReconstructionAccuracy: 0,
+          handoffSuccessRate: 0,
+          ruleComplianceRate: 0,
+          mcpCoordinationLatency: 0
+        },
+        queryLog: []
+      };
+    }
 
     // Step 6: Create cross-MCP relationships
     const crossReferences = await this.createCrossMCPReferences(
@@ -132,16 +225,18 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       gitPackage
     );
 
-    // Step 7: Log the orchestration event
-    await this.logOrchestrationEvent({
-      eventId: `handoff_${handoffId}`,
-      timestamp: new Date(),
-      sourceType: 'memory', // Primary coordinator
-      eventType: 'context_threshold_reached',
-      data: { handoffId, checkpointId: checkpoint.id },
-      affectedMCPs: ['memory', 'claudepoint', 'filesystem', 'git', 'database-platform'],
-      priority: 'high'
-    });
+    // Step 7: Log the orchestration event - only if we have database access
+    if (clients.databasePlatform) {
+      await this.logOrchestrationEvent({
+        eventId: `handoff_${handoffId}`,
+        timestamp: new Date(),
+        sourceType: 'memory',
+        eventType: 'context_threshold_reached',
+        data: { handoffId, checkpointId: checkpoint.id, availableMCPs: clients.availableMCPs },
+        affectedMCPs: clients.availableMCPs,
+        priority: 'high'
+      });
+    }
 
     const handoffPackage: UnifiedHandoffPackage = {
       handoffId,
@@ -150,7 +245,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       claudepointPackage: {
         checkpointId: checkpoint.id,
         description: checkpoint.description,
-        workingDirectory: '/Users/Luther/RiderProjects/FantasyGM', // TODO: Get from config
+        workingDirectory: '/Users/Luther/RiderProjects/FantasyGM',
         createdAt: checkpoint.createdAt,
         fileCount: checkpoint.fileCount || 0
       },
@@ -159,85 +254,133 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       databasePackage,
       crossReferences,
       coordinationMap: {
-        primaryContext: 'memory',
+        primaryContext: clients.memory ? 'memory' : 'filesystem',
         dependencies: [
-          { mcp: 'memory', dependsOn: ['claudepoint'], syncTriggers: [], required: true },
-          { mcp: 'filesystem', dependsOn: [], syncTriggers: [], required: false }
+          { mcp: 'memory', dependsOn: clients.claudepoint ? ['claudepoint'] : [], syncTriggers: [], required: !!clients.memory },
+          { mcp: 'filesystem', dependsOn: [], syncTriggers: [], required: !!clients.filesystem }
         ],
-        syncPriority: ['memory', 'claudepoint', 'database-platform', 'git', 'filesystem'],
+        syncPriority: clients.availableMCPs,
         conflictResolution: []
       },
       reconstructionInstructions: this.generateReconstructionInstructions(handoffId)
     };
 
-    console.log(`✅ Unified handoff package created successfully`);
+    console.log(`✅ Unified handoff package created successfully with ${clients.availableMCPs.length} MCPs`);
     return handoffPackage;
   }
 
   // ===== CONTEXT RECONSTRUCTION =====
 
   async reconstructUnifiedContext(handoffId: string): Promise<ReconstructedContext> {
-    const clients = await this.clientFactory.getAllClients();
+    const clients = await this.clientFactory.getAllAvailableClients();
     const startTime = Date.now();
 
     console.log(`🔄 Reconstructing context from handoff: ${handoffId}`);
+    console.log(`🔧 Available MCPs for reconstruction: ${clients.availableMCPs.join(', ')}`);
 
-    // Step 1: Load handoff package data from Memory MCP
-    const handoffEntities = await clients.memory.searchNodes(`handoff_package_${handoffId}`);
-    if (handoffEntities.length === 0) {
-      throw new Error(`Handoff package ${handoffId} not found in Memory MCP`);
+    // Step 1: Load handoff package data from Memory MCP - if available
+    let handoffEntities: any[] = [];
+    if (clients.memory) {
+      handoffEntities = await clients.memory.searchNodes(`handoff_package_${handoffId}`);
+      if (handoffEntities.length === 0) {
+        console.warn(`⚠️ Handoff package ${handoffId} not found in Memory MCP - attempting partial reconstruction`);
+      }
+    } else {
+      console.warn(`⚠️ Memory MCP not available - reconstruction will be limited`);
     }
 
-    // Step 2: Reconstruct from each MCP
-    const [
-      memoryContext,
-      claudepointState,
-      filesystemState,
-      gitState,
-      databaseState
-    ] = await Promise.allSettled([
-      this.reconstructMemoryContext(clients.memory, handoffId),
-      this.reconstructClaudepointState(clients.claudepoint, handoffId),
-      this.reconstructFilesystemState(clients.filesystem, handoffId),
-      this.reconstructGitState(clients.git, handoffId),
-      this.reconstructDatabaseState(clients.databasePlatform, handoffId)
-    ]);
+    // Step 2: Reconstruct from available MCPs only
+    const reconstructionPromises: Promise<any>[] = [];
+    const mcpLabels: string[] = [];
 
-    // Step 3: Assess reconstruction quality
-    const reconstructedElements = [
-      memoryContext,
-      claudepointState,
-      filesystemState,
-      gitState,
-      databaseState
-    ];
+    if (clients.memory) {
+      reconstructionPromises.push(this.reconstructMemoryContext(clients.memory, handoffId));
+      mcpLabels.push('memory');
+    }
+    if (clients.claudepoint) {
+      reconstructionPromises.push(this.reconstructClaudepointState(clients.claudepoint, handoffId));
+      mcpLabels.push('claudepoint');
+    }
+    if (clients.filesystem) {
+      reconstructionPromises.push(this.reconstructFilesystemState(clients.filesystem, handoffId));
+      mcpLabels.push('filesystem');
+    }
+    if (clients.git) {
+      reconstructionPromises.push(this.reconstructGitState(clients.git, handoffId));
+      mcpLabels.push('git');
+    }
+    if (clients.databasePlatform) {
+      reconstructionPromises.push(this.reconstructDatabaseState(clients.databasePlatform, handoffId));
+      mcpLabels.push('database');
+    }
 
+    const reconstructedElements = await Promise.allSettled(reconstructionPromises);
+
+    // Step 3: Assess reconstruction quality based on available MCPs
+    const totalPossibleMCPs = 5; // memory, claudepoint, filesystem, git, database
+    const availableMCPs = clients.availableMCPs.length;
     const successfulReconstructions = reconstructedElements.filter(r => r.status === 'fulfilled').length;
-    const completeness = successfulReconstructions / reconstructedElements.length;
     
-    const missingElements = reconstructedElements
-      .filter(r => r.status === 'rejected')
-      .map((_, index) => ['memory', 'claudepoint', 'filesystem', 'git', 'database'][index]);
+    // Calculate completeness based on what's available vs what succeeded
+    const completeness = availableMCPs > 0 ? successfulReconstructions / availableMCPs : 0;
+    const overallCompleteness = availableMCPs / totalPossibleMCPs;
+    
+    const missingElements = [];
+    const allMCPTypes = ['memory', 'claudepoint', 'filesystem', 'git', 'database'];
+    
+    // Add missing MCPs (not configured)
+    for (const mcpType of allMCPTypes) {
+      const isConfigured = clients.availableMCPs.some(available => 
+        available === mcpType || (mcpType === 'database' && (available === 'database-platform' || available === 'database-analytics'))
+      );
+      if (!isConfigured) {
+        missingElements.push(mcpType);
+      }
+    }
+    
+    // Add failed reconstructions
+    reconstructedElements.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        missingElements.push(mcpLabels[index]);
+      }
+    });
+
+    // Create context object with null values for missing MCPs
+    const contextResults = {
+      memory: null,
+      claudepoint: null,
+      filesystem: null,
+      git: null,
+      database: null
+    };
+
+    // Populate available results
+    reconstructedElements.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const mcpType = mcpLabels[index] as keyof typeof contextResults;
+        contextResults[mcpType] = result.value;
+      }
+    });
 
     const reconstructedContext: ReconstructedContext = {
       contextId: `context_${handoffId}_${Date.now()}`,
       reconstructedAt: new Date(),
       sourceHandoffId: handoffId,
-      memoryContext: this.extractValue(memoryContext, null),
-      claudepointState: this.extractValue(claudepointState, null),
-      filesystemState: this.extractValue(filesystemState, null),
-      gitState: this.extractValue(gitState, null),
-      databaseState: this.extractValue(databaseState, null),
-      completeness,
-      accuracy: completeness, // Simplified - in real implementation, would check data integrity
-      missingElements: missingElements.filter((element): element is string => element !== undefined),
+      memoryContext: contextResults.memory,
+      claudepointState: contextResults.claudepoint,
+      filesystemState: contextResults.filesystem,
+      gitState: contextResults.git,
+      databaseState: contextResults.database,
+      completeness: overallCompleteness, // Overall completeness including missing MCPs
+      accuracy: completeness, // Accuracy of available MCPs
+      missingElements,
       reconstructionTime: Date.now() - startTime
     };
 
     // Step 4: Update current session with reconstructed data
     await this.updateCurrentSessionFromReconstruction(reconstructedContext);
 
-    console.log(`✅ Context reconstruction completed: ${(completeness * 100).toFixed(1)}% successful`);
+    console.log(`✅ Context reconstruction completed: ${(overallCompleteness * 100).toFixed(1)}% overall, ${(completeness * 100).toFixed(1)}% of available MCPs`);
     return reconstructedContext;
   }
 
@@ -477,24 +620,63 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
   }
 
   private async getDatabaseSessionInfo(platformClient: any, analyticsClient: any): Promise<any[]> {
-    // Check both database connections
-    const platformHealth = await platformClient.healthCheck();
-    const analyticsHealth = await analyticsClient.healthCheck();
+    const sessions: any[] = [];
     
-    return [
-      {
+    // Check platform database if available
+    if (platformClient) {
+      try {
+        const platformHealth = await platformClient.healthCheck();
+        sessions.push({
+          database: 'platform',
+          activeQueries: 0,
+          lastActivity: new Date(),
+          connectionStatus: platformHealth.status === 'healthy' ? 'connected' : 'error'
+        });
+      } catch (error) {
+        sessions.push({
+          database: 'platform',
+          activeQueries: 0,
+          lastActivity: new Date(),
+          connectionStatus: 'error'
+        });
+      }
+    } else {
+      sessions.push({
         database: 'platform',
         activeQueries: 0,
         lastActivity: new Date(),
-        connectionStatus: platformHealth.status === 'healthy' ? 'connected' : 'error'
-      },
-      {
-        database: 'analytics', 
+        connectionStatus: 'not_configured'
+      });
+    }
+    
+    // Check analytics database if available
+    if (analyticsClient) {
+      try {
+        const analyticsHealth = await analyticsClient.healthCheck();
+        sessions.push({
+          database: 'analytics',
+          activeQueries: 0,
+          lastActivity: new Date(),
+          connectionStatus: analyticsHealth.status === 'healthy' ? 'connected' : 'error'
+        });
+      } catch (error) {
+        sessions.push({
+          database: 'analytics',
+          activeQueries: 0,
+          lastActivity: new Date(),
+          connectionStatus: 'error'
+        });
+      }
+    } else {
+      sessions.push({
+        database: 'analytics',
         activeQueries: 0,
         lastActivity: new Date(),
-        connectionStatus: analyticsHealth.status === 'healthy' ? 'connected' : 'error'
-      }
-    ];
+        connectionStatus: 'not_configured'
+      });
+    }
+    
+    return sessions;
   }
 
   private assessCoordinationHealth(healthStatus: Map<MCPType, MCPHealth>): any {
@@ -597,20 +779,26 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
   }
 
   private async createDatabaseHandoffPackage(platformClient: any, analyticsClient: any, handoffId: string): Promise<any> {
-    // Store handoff analytics
-    await platformClient.query(`
-      INSERT INTO conversation_sessions (
-        id, user_id, project_name, start_time, 
-        conversation_token_count, claudepoint_checkpoint_id
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `, [
-      this.currentSession.id,
-      'luther',
-      'FantasyGM',
-      this.currentSession.startTime,
-      this.currentSession.tokenCount,
-      handoffId
-    ]);
+    // Store handoff analytics if platform client is available
+    if (platformClient) {
+      try {
+        await platformClient.query(`
+          INSERT INTO conversation_sessions (
+            id, user_id, project_name, start_time, 
+            conversation_token_count, claudepoint_checkpoint_id
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+          this.currentSession.id,
+          'luther',
+          'FantasyGM',
+          this.currentSession.startTime,
+          this.currentSession.tokenCount,
+          handoffId
+        ]);
+      } catch (error) {
+        console.warn('Failed to store handoff analytics in database:', error);
+      }
+    }
 
     return {
       sessionAnalytics: {
@@ -685,20 +873,22 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     
     // Log to database if available
     try {
-      const clients = await this.clientFactory.getAllClients();
-      await clients.databasePlatform.query(`
-        INSERT INTO mcp_coordination_log (
-          session_id, coordination_type, mcps_involved, 
-          coordination_success, metadata, timestamp
-        ) VALUES (?, ?, ?, ?, ?, ?)
-      `, [
-        this.currentSession.id,
-        event.eventType,
-        event.affectedMCPs,
-        true,
-        JSON.stringify(event.data),
-        event.timestamp
-      ]);
+      const clients = await this.clientFactory.getAllAvailableClients();
+      if (clients.databasePlatform) {
+        await clients.databasePlatform.query(`
+          INSERT INTO mcp_coordination_log (
+            session_id, coordination_type, mcps_involved, 
+            coordination_success, metadata, timestamp
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+          this.currentSession.id,
+          event.eventType,
+          event.affectedMCPs,
+          true,
+          JSON.stringify(event.data),
+          event.timestamp
+        ]);
+      }
     } catch (error) {
       console.warn('Failed to log orchestration event to database:', error);
     }

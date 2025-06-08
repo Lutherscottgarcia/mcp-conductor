@@ -27,6 +27,7 @@ MAGIC="✨"
 echo -e "${CYAN}🎭 MCP Conductor Installation${NC}"
 echo -e "${PURPLE}Revolutionary 5-MCP Orchestration System${NC}"
 echo -e "${BLUE}Eliminates AI session startup overhead with 99.3% time savings${NC}"
+echo -e "${GREEN}✅ Includes all critical MCP fixes for automatic Claude Desktop integration${NC}"
 echo ""
 
 # Check if running on macOS
@@ -160,44 +161,18 @@ if [ -f "$CLAUDE_CONFIG" ]; then
     echo -e "${SUCCESS} Backup created"
 fi
 
-# Generate MCP configuration
-cat > /tmp/mcp_config.json << EOF
-{
-  "mcpServers": {
-    "conversation-continuity": {
-      "command": "node",
-      "args": ["$MCP_DIR/dist/index.js"],
-      "env": {
-        "MCP_CONDUCTOR_PROJECT_DIR": "$PROJECTS_DIR",
-        "MCP_CONDUCTOR_WORKSPACE": "$CLAUDE_DIR"
-      }
-    },
-    "memory": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-memory"
-      ]
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "$PROJECTS_DIR",
-        "$CLAUDE_DIR"
-      ]
-    },
-    "claudepoint": {
-      "command": "claudepoint",
-      "args": [],
-      "env": {
-        "CLAUDEPOINT_PROJECT_DIR": "$PROJECTS_DIR"
-      }
-    }
-  }
-}
-EOF
+# Generate MCP configuration from corrected template
+echo -e "${INFO} Generating corrected Claude configuration..."
+
+# Use the corrected template with proper substitution
+cp "$MCP_DIR/claude_desktop_config_template.json" "/tmp/mcp_config.json"
+
+# Replace template variables with actual paths
+sed -i "" "s|{{MCP_DIR}}|$MCP_DIR|g" "/tmp/mcp_config.json"
+sed -i "" "s|{{PROJECTS_DIR}}|$PROJECTS_DIR|g" "/tmp/mcp_config.json"
+sed -i "" "s|{{CLAUDE_DIR}}|$CLAUDE_DIR|g" "/tmp/mcp_config.json"
+
+echo -e "${SUCCESS} Configuration generated with corrected MCP setup"
 
 # Merge with existing config or create new
 if [ -f "$CLAUDE_CONFIG" ]; then
@@ -271,6 +246,7 @@ echo -e "  3. Try: 'create_project_intelligence_cache' to eliminate session star
 echo -e "  4. Use magic incantation: 'Load ProjectIntelligence_YourProject from Memory MCP - instant context!'"
 echo ""
 echo -e "${INFO} Documentation:"
+echo -e "  • MCP Fixes Applied: ${MCP_DIR}/docs/mcp-fixes-applied.md"
 echo -e "  • Efficiency Revolution Guide: ${MCP_DIR}/docs/efficiency-revolution.md"
 echo -e "  • Magic Incantations: ${MCP_DIR}/docs/magic-incantations.md"
 echo -e "  • API Reference: ${MCP_DIR}/docs/api-reference-project-intelligence.md"

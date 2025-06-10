@@ -5,6 +5,7 @@
  * Coordinates Memory, Claudepoint, Filesystem, Git, and Database MCPs
  */
 
+import { v4 as uuidv4 } from 'uuid';
 import type { MCPClientFactory } from '@/utils/mcp-client-factory.js';
 import type {
   MCPOrchestrator,
@@ -60,7 +61,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     const clients = await this.clientFactory.getAllAvailableClients();
     const healthStatus = await this.clientFactory.checkAllMCPHealth();
 
-    console.log(`🔍 Monitoring ecosystem with ${clients.availableMCPs.length} available MCPs`);
+    console.log(`Monitoring ecosystem with ${clients.availableMCPs.length} available MCPs`);
 
     // Gather state from available MCPs in parallel - gracefully handle missing ones
     const [
@@ -111,8 +112,8 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     const handoffId = this.generateHandoffId();
     const clients = await this.clientFactory.getAllAvailableClients();
 
-    console.log(`🎭 Creating unified handoff package: ${handoffId}`);
-    console.log(`🔧 Available MCPs: ${clients.availableMCPs.join(', ')}`);
+    console.log(`Creating unified handoff package: ${handoffId}`);
+    console.log(`Available MCPs: ${clients.availableMCPs.join(', ')}`);
 
     // Step 1: Create Claudepoint checkpoint first (code state) - if available
     let checkpoint: any = null;
@@ -120,9 +121,9 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       checkpoint = await clients.claudepoint.createCheckpoint({
         description: `Conversation handoff: ${this.currentSession.currentTask || 'Session boundary'}`
       });
-      console.log(`🔄 Created Claudepoint checkpoint: ${checkpoint.id}`);
+      console.log(`Created Claudepoint checkpoint: ${checkpoint.id}`);
     } else {
-      console.log(`⚠️ Claudepoint MCP not available - creating checkpoint-less handoff`);
+      console.log(`WARNING: Claudepoint MCP not available - creating checkpoint-less handoff`);
       checkpoint = {
         id: `mock_checkpoint_${handoffId}`,
         description: 'Handoff without Claudepoint checkpoint',
@@ -135,9 +136,9 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     let memoryPackage: any;
     if (clients.memory) {
       memoryPackage = await this.createMemoryHandoffPackage(clients.memory, handoffId, checkpoint.id);
-      console.log(`🧠 Created Memory package`);
+      console.log(`Created Memory package`);
     } else {
-      console.log(`⚠️ Memory MCP not available - using minimal handoff data`);
+      console.log(`WARNING: Memory MCP not available - using minimal handoff data`);
       memoryPackage = {
         compressedContextEntities: [],
         sessionRuleEntities: [],
@@ -151,9 +152,9 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     let filesystemPackage: any;
     if (clients.filesystem) {
       filesystemPackage = await this.createFilesystemHandoffPackage(clients.filesystem);
-      console.log(`📁 Created Filesystem package`);
+      console.log(`Created Filesystem package`);
     } else {
-      console.log(`⚠️ Filesystem MCP not available - using minimal filesystem data`);
+      console.log(`WARNING: Filesystem MCP not available - using minimal filesystem data`);
       filesystemPackage = {
         projectSnapshot: {
           rootPath: '/unknown',
@@ -173,9 +174,9 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     let gitPackage: any;
     if (clients.git) {
       gitPackage = await this.createGitHandoffPackage(clients.git);
-      console.log(`🔀 Created Git package`);
+      console.log(`Created Git package`);
     } else {
-      console.log(`⚠️ Git MCP not available - using minimal git data`);
+      console.log(`WARNING: Git MCP not available - using minimal git data`);
       gitPackage = {
         currentBranch: 'not_available',
         commitHash: 'no_git_mcp',
@@ -193,9 +194,9 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
         clients.databaseAnalytics, 
         handoffId
       );
-      console.log(`🗄️ Created Database package`);
+      console.log(`Created Database package`);
     } else {
-      console.log(`⚠️ Database MCPs not available - using minimal analytics data`);
+      console.log(`WARNING: Database MCPs not available - using minimal analytics data`);
       databasePackage = {
         sessionAnalytics: {
           sessionId: this.currentSession.id,
@@ -265,7 +266,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       reconstructionInstructions: this.generateReconstructionInstructions(handoffId)
     };
 
-    console.log(`✅ Unified handoff package created successfully with ${clients.availableMCPs.length} MCPs`);
+    console.log(`Unified handoff package created successfully with ${clients.availableMCPs.length} MCPs`);
     return handoffPackage;
   }
 
@@ -275,18 +276,18 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     const clients = await this.clientFactory.getAllAvailableClients();
     const startTime = Date.now();
 
-    console.log(`🔄 Reconstructing context from handoff: ${handoffId}`);
-    console.log(`🔧 Available MCPs for reconstruction: ${clients.availableMCPs.join(', ')}`);
+    console.log(`Reconstructing context from handoff: ${handoffId}`);
+    console.log(`Available MCPs for reconstruction: ${clients.availableMCPs.join(', ')}`);
 
     // Step 1: Load handoff package data from Memory MCP - if available
     let handoffEntities: any[] = [];
     if (clients.memory) {
       handoffEntities = await clients.memory.searchNodes(`handoff_package_${handoffId}`);
       if (handoffEntities.length === 0) {
-        console.warn(`⚠️ Handoff package ${handoffId} not found in Memory MCP - attempting partial reconstruction`);
+        console.warn(`WARNING: Handoff package ${handoffId} not found in Memory MCP - attempting partial reconstruction`);
       }
     } else {
-      console.warn(`⚠️ Memory MCP not available - reconstruction will be limited`);
+      console.warn(`WARNING: Memory MCP not available - reconstruction will be limited`);
     }
 
     // Step 2: Reconstruct from available MCPs only
@@ -380,7 +381,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     // Step 4: Update current session with reconstructed data
     await this.updateCurrentSessionFromReconstruction(reconstructedContext);
 
-    console.log(`✅ Context reconstruction completed: ${(overallCompleteness * 100).toFixed(1)}% overall, ${(completeness * 100).toFixed(1)}% of available MCPs`);
+    console.log(`Context reconstruction completed: ${(overallCompleteness * 100).toFixed(1)}% overall, ${(completeness * 100).toFixed(1)}% of available MCPs`);
     return reconstructedContext;
   }
 
@@ -399,7 +400,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       'database-analytics': null
     };
 
-    console.log(`🔄 Starting cross-MCP synchronization`);
+    console.log(`Starting cross-MCP synchronization`);
 
     try {
       // Sync Memory MCP with current session state
@@ -441,7 +442,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
 
   async coordinateConversationCheckpoint(): Promise<CoordinatedCheckpoint> {
     const clients = await this.clientFactory.getAllClients();
-    const checkpointId = `coordinated_${Date.now()}`;
+    const checkpointId = this.generateCheckpointId();
 
     // Create checkpoints across multiple MCPs
     const claudepointCheckpoint = await clients.claudepoint.createCheckpoint({
@@ -449,8 +450,9 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     });
 
     // Store coordination info in Memory MCP
+    const entityId = this.generateEntityId('CoordinatedCheckpoint');
     await clients.memory.createEntities([{
-      name: `CoordinatedCheckpoint_${checkpointId}`,
+      name: entityId,
       entityType: 'coordinated_checkpoint',
       observations: [
         `Claudepoint ID: ${claudepointCheckpoint.id}`,
@@ -480,7 +482,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
       coordinatedAt: new Date(),
       mcpCheckpoints: {
         'claudepoint': claudepointCheckpoint.id,
-        'memory': `CoordinatedCheckpoint_${checkpointId}`,
+        'memory': entityId,
         'database-platform': this.currentSession.id,
         'filesystem': 'no_checkpoint',
         'git': 'no_checkpoint',
@@ -584,11 +586,25 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
   // ===== PRIVATE HELPER METHODS =====
 
   private generateSessionId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    return uuidv4();
   }
 
   private generateHandoffId(): string {
-    return `handoff_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    return uuidv4();
+  }
+
+  private generateCheckpointId(): string {
+    return uuidv4();
+  }
+
+  private generateEntityId(prefix?: string): string {
+    const uuid = uuidv4();
+    return prefix ? `${prefix}_${uuid}` : uuid;
+  }
+
+  private isValidUUID(uuid: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
   }
 
   private extractValue<T>(result: PromiseSettledResult<T>, defaultValue: T): T {
@@ -1156,7 +1172,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
     };
 
     await memoryClient.createEntities([entity]);
-    console.log(`💾 Stored Project Intelligence: ${entity.name}`);
+    console.log(`Stored Project Intelligence: ${entity.name}`);
   }
 
   private parseIntelligenceFromMemoryEntity(entity: any): ProjectIntelligence {

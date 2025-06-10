@@ -59,7 +59,7 @@ export class SessionRulesEngine implements RuleEngine {
     // Update cache
     this.ruleCache.set(completeRule.id, completeRule);
 
-    console.log(`✅ Session rule created: ${completeRule.id} - "${completeRule.rule}"`);
+    console.log(`Session rule created: ${completeRule.id} - "${completeRule.rule}"`);
     return completeRule;
   }
 
@@ -81,7 +81,7 @@ export class SessionRulesEngine implements RuleEngine {
     // Update cache
     this.ruleCache.set(ruleId, updatedRule);
 
-    console.log(`✅ Session rule updated: ${ruleId}`);
+    console.log(`Session rule updated: ${ruleId}`);
     return updatedRule;
   }
 
@@ -92,7 +92,7 @@ export class SessionRulesEngine implements RuleEngine {
     // Remove from cache
     this.ruleCache.delete(ruleId);
 
-    console.log(`✅ Session rule deleted: ${ruleId}`);
+    console.log(`Session rule deleted: ${ruleId}`);
   }
 
   async getRules(scope?: RuleScope): Promise<SessionRule[]> {
@@ -118,11 +118,11 @@ export class SessionRulesEngine implements RuleEngine {
     const activeRules = await this.getRules();
     const results: RuleEnforcementResult[] = [];
 
-    console.log(`🔍 Enforcing rules for action: ${action.type}`);
+    console.log(`Enforcing rules for action: ${action.type}`);
 
     for (const rule of activeRules.filter(r => r.active)) {
       if (this.actionMatchesRule(action, rule)) {
-        console.log(`⚖️ Rule ${rule.id} applies to action ${action.type}`);
+        console.log(`Rule ${rule.id} applies to action ${action.type}`);
         
         const result = await this.enforceIndividualRule(rule, action);
         results.push(result);
@@ -135,7 +135,7 @@ export class SessionRulesEngine implements RuleEngine {
 
         // If rule blocks action, stop processing
         if (result.result === 'blocked') {
-          console.log(`🚫 Action blocked by rule: ${rule.id}`);
+          console.log(`Action blocked by rule: ${rule.id}`);
           break;
         }
       }
@@ -161,7 +161,7 @@ export class SessionRulesEngine implements RuleEngine {
   // ===== LUTHER'S SPECIFIC RULES INITIALIZATION =====
 
   async initializeLutherRules(): Promise<void> {
-    console.log(`🎯 Initializing Luther's session rules...`);
+    console.log(`Initializing Luther's session rules...`);
 
     for (const ruleData of LUTHER_SESSION_RULES) {
       const existingRule = await this.findRuleByText(ruleData.rule!);
@@ -174,13 +174,13 @@ export class SessionRulesEngine implements RuleEngine {
           usageCount: 0,
           violationCount: 0
         });
-        console.log(`➕ Created rule: ${ruleData.id}`);
+        console.log(`Created rule: ${ruleData.id}`);
       } else {
-        console.log(`✅ Rule already exists: ${ruleData.id}`);
+        console.log(`Rule already exists: ${ruleData.id}`);
       }
     }
 
-    console.log(`🎉 Luther's session rules initialized successfully`);
+    console.log(`Luther's session rules initialized successfully`);
   }
 
   // ===== RULE LEARNING & OPTIMIZATION =====
@@ -209,7 +209,7 @@ export class SessionRulesEngine implements RuleEngine {
       });
     }
 
-    console.log(`📝 Recorded rule violation: ${violation.ruleId}`);
+    console.log(`Recorded rule violation: ${violation.ruleId}`);
   }
 
   async suggestNewRules(patterns: UserBehaviorPattern[]): Promise<RuleSuggestion[]> {
@@ -280,7 +280,7 @@ export class SessionRulesEngine implements RuleEngine {
       await this.storeRuleInMemory(rule);
     }
 
-    console.log(`🔄 Synced ${rules.length} rules to Memory MCP`);
+    console.log(`Synced ${rules.length} rules to Memory MCP`);
   }
 
   async loadRulesFromMemory(): Promise<SessionRule[]> {
@@ -298,7 +298,7 @@ export class SessionRulesEngine implements RuleEngine {
     }
 
     this.lastCacheUpdate = new Date();
-    console.log(`📥 Loaded ${rules.length} rules from Memory MCP`);
+    console.log(`Loaded ${rules.length} rules from Memory MCP`);
     return rules;
   }
 

@@ -230,3 +230,16 @@ Thumbs.db
 .Spotlight-V100
 .Trashes
 ehthumbs.db
+# Development and debug files
+CHECKPOINT_CLEANUP.md
+CLAUDEPOINT_UPGRADE.md
+EMOJI_FIX_SUMMARY.md
+HANDOFF_REAL_CHECKPOINTS.md
+MCP_Checkpoint_Debug_Investigation.md
+build_real_checkpoint.sh
+claude_desktop_config_*.json
+debug-server.js
+step-debug.js
+test-minimal.js
+REBUILD_INSTRUCTIONS/
+src/*.backup

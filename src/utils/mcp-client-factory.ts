@@ -5,7 +5,181 @@
  * Provides unified interface for MCP orchestration
  */
 
+import { promisify } from 'util';
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+
 import type { MCPType, MCPHealth } from '@/types/shared-types.js';
+
+const execAsync = promisify(exec);
+
+// ===== REAL CHECKPOINT UTILITIES =====
+const CHECKPOINT_DIR = '/Users/Luther/RiderProjects/.checkpoints';
+const SNAPSHOTS_DIR = path.join(CHECKPOINT_DIR, 'snapshots');
+const SOURCE_DIR = '/Users/Luther/RiderProjects';
+
+// Patterns to exclude from checkpoints (keep them small!)
+const EXCLUDE_PATTERNS = [
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  '.DS_Store',
+  '*.log',
+  '__pycache__',
+  '*.pyc',
+  '.env',
+  '.venv',
+  'venv',
+  'venv_new',
+  '.idea',
+  '*.tmp',
+  '*.temp',
+  '.checkpoints'
+];
+
+interface CheckpointMetadata {
+  id: string;
+  name?: string | undefined;
+  description: string;
+  createdAt: Date;
+  fileCount: number;
+  size: number;
+  sourceDir: string;
+}
+
+class RealCheckpointManager {
+  static async ensureDirectoryStructure(): Promise<void> {
+    await fs.promises.mkdir(CHECKPOINT_DIR, { recursive: true });
+    await fs.promises.mkdir(SNAPSHOTS_DIR, { recursive: true });
+  }
+
+  static async createTarball(checkpointId: string): Promise<{ fileCount: number; size: number }> {
+    const tarPath = path.join(SNAPSHOTS_DIR, checkpointId, 'data.tar.gz');
+    const checkpointDir = path.join(SNAPSHOTS_DIR, checkpointId);
+    
+    // Create checkpoint directory
+    await fs.promises.mkdir(checkpointDir, { recursive: true });
+    
+    // Build exclude arguments for tar
+    const excludeArgs = EXCLUDE_PATTERNS.map(pattern => `--exclude='${pattern}'`).join(' ');
+    
+    // Create tarball of RiderProjects (excluding large dirs)
+    const tarCommand = `cd "${SOURCE_DIR}/.." && tar ${excludeArgs} -czf "${tarPath}" RiderProjects`;
+    
+    console.log(`Creating checkpoint tarball: ${checkpointId}`);
+    await execAsync(tarCommand);
+    
+    // Get file stats
+    const stats = await fs.promises.stat(tarPath);
+    
+    // Count files in tarball (approximate)
+    const { stdout } = await execAsync(`tar -tzf "${tarPath}" | wc -l`);
+    const fileCount = parseInt(stdout.trim());
+    
+    return {
+      fileCount,
+      size: stats.size
+    };
+  }
+
+  static async saveMetadata(checkpointId: string, metadata: CheckpointMetadata): Promise<void> {
+    const metadataPath = path.join(SNAPSHOTS_DIR, checkpointId, 'metadata.json');
+    await fs.promises.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+  }
+
+  static async loadMetadata(checkpointId: string): Promise<CheckpointMetadata | null> {
+    try {
+      const metadataPath = path.join(SNAPSHOTS_DIR, checkpointId, 'metadata.json');
+      const data = await fs.promises.readFile(metadataPath, 'utf8');
+      return JSON.parse(data);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  static async listCheckpointDirectories(): Promise<string[]> {
+    try {
+      const items = await fs.promises.readdir(SNAPSHOTS_DIR);
+      const checkpoints = [];
+      
+      for (const item of items) {
+        const itemPath = path.join(SNAPSHOTS_DIR, item);
+        const stat = await fs.promises.stat(itemPath);
+        if (stat.isDirectory()) {
+          checkpoints.push(item);
+        }
+      }
+      
+      return checkpoints.sort((a, b) => b.localeCompare(a)); // Newest first
+    } catch (error) {
+      return [];
+    }
+  }
+
+  static async extractCheckpoint(checkpointId: string, targetDir: string, dryRun: boolean = false): Promise<{ success: boolean; message: string; filesRestored: number }> {
+    const tarPath = path.join(SNAPSHOTS_DIR, checkpointId, 'data.tar.gz');
+    
+    if (!await fs.promises.access(tarPath).then(() => true).catch(() => false)) {
+      return {
+        success: false,
+        message: `Checkpoint tarball not found: ${checkpointId}`,
+        filesRestored: 0
+      };
+    }
+    
+    if (dryRun) {
+      // List files that would be restored
+      const { stdout } = await execAsync(`tar -tzf "${tarPath}" | head -20`);
+      return {
+        success: true,
+        message: `Dry run: Would restore checkpoint ${checkpointId}\nSample files:\n${stdout}`,
+        filesRestored: 0
+      };
+    }
+    
+    // Create backup before restore
+    const backupId = `emergency_backup_${Date.now()}`;
+    console.log(`Creating emergency backup: ${backupId}`);
+    const backupResult = await this.createTarball(backupId);
+    const backupMetadata: CheckpointMetadata = {
+      id: backupId,
+      description: `Emergency backup before restoring ${checkpointId}`,
+      createdAt: new Date(),
+      fileCount: backupResult.fileCount,
+      size: backupResult.size,
+      sourceDir: SOURCE_DIR
+    };
+    await this.saveMetadata(backupId, backupMetadata);
+    
+    // Extract checkpoint
+    const extractCommand = `cd "${targetDir}/.." && tar -xzf "${tarPath}"`;
+    console.log(`Restoring checkpoint: ${checkpointId}`);
+    await execAsync(extractCommand);
+    
+    const metadata = await this.loadMetadata(checkpointId);
+    
+    return {
+      success: true,
+      message: `Successfully restored checkpoint ${checkpointId} (emergency backup created: ${backupId})`,
+      filesRestored: metadata?.fileCount || 0
+    };
+  }
+
+  static formatSize(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let unitIndex = 0;
+    
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    
+    return `${size.toFixed(1)}${units[unitIndex]}`;
+  }
+}
 
 // ===== TEST MODE DETECTION =====
 const isTestMode = () => {
@@ -501,7 +675,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
 
   async readGraph(): Promise<MemoryGraph> {
     if (isTestMode()) {
-      console.log(`🧠 [TEST MODE] Reading graph (mock data)`);
+      console.log(`[TEST MODE] Reading graph (mock data)`);
       return {
         entities: [
           {
@@ -521,69 +695,207 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
   constructor(private workingDirectory?: string) {}
 
   async createCheckpoint(options: CheckpointOptions): Promise<Checkpoint> {
-    if (isTestMode()) {
-      // console.log(`[TEST MODE] Creating checkpoint: ${options.description}`);
-      return {
-        id: `test_checkpoint_${Date.now()}`,
-        name: options.name || 'Test Checkpoint',
-        description: options.description || 'Test checkpoint',
+    console.log(`Creating REAL checkpoint: ${options.description}`);
+    
+    // Ensure directory structure exists
+    await RealCheckpointManager.ensureDirectoryStructure();
+    
+    // Generate checkpoint ID
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const checkpointId = options.name 
+      ? `${options.name}_${timestamp}`
+      : `checkpoint_${timestamp}`;
+    
+    try {
+      // Create actual tarball backup of RiderProjects
+      const { fileCount, size } = await RealCheckpointManager.createTarball(checkpointId);
+      
+      // Create metadata
+      const metadata: CheckpointMetadata = {
+        id: checkpointId,
+        name: options.name || undefined,
+        description: options.description,
         createdAt: new Date(),
-        fileCount: 42
+        fileCount,
+        size,
+        sourceDir: SOURCE_DIR
       };
+      
+      // Save metadata
+      await RealCheckpointManager.saveMetadata(checkpointId, metadata);
+      
+      console.log(`Real checkpoint created: ${checkpointId} (${RealCheckpointManager.formatSize(size)}, ${fileCount} files)`);
+      
+      return {
+        id: checkpointId,
+        name: options.name || checkpointId,
+        description: options.description,
+        createdAt: metadata.createdAt,
+        fileCount: metadata.fileCount
+      };
+    } catch (error) {
+      console.error(`Failed to create checkpoint: ${error}`);
+      throw new Error(`Failed to create checkpoint: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return await (globalThis as any).local__claudepoint__create_checkpoint(options);
   }
 
   async listCheckpoints(): Promise<Checkpoint[]> {
-    if (isTestMode()) {
-      // console.log(`[TEST MODE] Listing checkpoints`);
+    console.log(`Listing REAL checkpoints`);
+    
+    try {
+      const checkpointIds = await RealCheckpointManager.listCheckpointDirectories();
+      const checkpoints: Checkpoint[] = [];
+      
+      for (const checkpointId of checkpointIds) {
+        const metadata = await RealCheckpointManager.loadMetadata(checkpointId);
+        if (metadata) {
+          checkpoints.push({
+            id: metadata.id,
+            name: metadata.name || metadata.id,
+            description: metadata.description,
+            createdAt: new Date(metadata.createdAt),
+            fileCount: metadata.fileCount
+          });
+        }
+      }
+      
+      console.log(`Found ${checkpoints.length} real checkpoints`);
+      return checkpoints;
+    } catch (error) {
+      console.error(`Failed to list checkpoints: ${error}`);
       return [];
     }
-    const result = await (globalThis as any).local__claudepoint__list_checkpoints({});
-    return result.checkpoints || [];
   }
 
   async restoreCheckpoint(checkpoint: string, dryRun?: boolean): Promise<RestoreResult> {
-    if (isTestMode()) {
-      // console.log(`[TEST MODE] Restoring checkpoint: ${checkpoint} (dry run: ${dryRun})`);
+    console.log(`${dryRun ? 'Dry run' : 'Restoring'} REAL checkpoint: ${checkpoint}`);
+    
+    try {
+      // Find checkpoint by partial name match
+      const checkpointIds = await RealCheckpointManager.listCheckpointDirectories();
+      const matchingCheckpoint = checkpointIds.find(id => 
+        id.includes(checkpoint) || id === checkpoint
+      );
+      
+      if (!matchingCheckpoint) {
+        return {
+          success: false,
+          message: `Checkpoint not found: ${checkpoint}`,
+          filesRestored: 0
+        };
+      }
+      
+      // Extract checkpoint
+      const result = await RealCheckpointManager.extractCheckpoint(
+        matchingCheckpoint, 
+        SOURCE_DIR, 
+        dryRun || false
+      );
+      
+      console.log(`${result.success ? 'SUCCESS' : 'FAILED'} Checkpoint restore result: ${result.message}`);
+      return result;
+    } catch (error) {
+      console.error(`Failed to restore checkpoint: ${error}`);
       return {
-        success: true,
-        message: 'Test checkpoint restored successfully',
-        filesRestored: 25
+        success: false,
+        message: `Failed to restore checkpoint: ${error instanceof Error ? error.message : String(error)}`,
+        filesRestored: 0
       };
     }
-    return await (globalThis as any).local__claudepoint__restore_checkpoint({ checkpoint, dry_run: dryRun });
   }
 
   async setupClaudepoint(): Promise<void> {
-    if (isTestMode()) {
-      // console.log(`[TEST MODE] Setting up Claudepoint`);
-      return;
+    console.log(`Setting up REAL ClaudePoint`);
+    
+    try {
+      // Ensure directory structure exists
+      await RealCheckpointManager.ensureDirectoryStructure();
+      
+      // Create initial config if it doesn't exist
+      const configPath = path.join(CHECKPOINT_DIR, 'config.json');
+      const configExists = await fs.promises.access(configPath).then(() => true).catch(() => false);
+      
+      if (!configExists) {
+        const config = {
+          maxCheckpoints: 10,
+          autoName: true,
+          sourceDir: SOURCE_DIR,
+          excludePatterns: EXCLUDE_PATTERNS,
+          nameTemplate: 'checkpoint_{timestamp}'
+        };
+        
+        await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2));
+        console.log(`Created ClaudePoint config: ${configPath}`);
+      }
+      
+      console.log(`Real ClaudePoint setup complete in: ${CHECKPOINT_DIR}`);
+    } catch (error) {
+      console.error(`Failed to setup ClaudePoint: ${error}`);
+      throw error;
     }
-    await (globalThis as any).local__claudepoint__setup_claudepoint({});
   }
 
   async getChangelog(): Promise<ChangelogEntry[]> {
-    if (isTestMode()) {
-      // console.log(`[TEST MODE] Getting changelog`);
-      return [
-        {
-          action_type: 'TEST_MODE',
-          description: 'Mock changelog entry for testing',
-          details: 'Running in test mode with mock implementations'
-        }
-      ];
+    console.log(`Getting REAL changelog`);
+    
+    try {
+      const changelogPath = path.join(CHECKPOINT_DIR, 'changelog.json');
+      const changelogExists = await fs.promises.access(changelogPath).then(() => true).catch(() => false);
+      
+      if (!changelogExists) {
+        return [{
+          action_type: 'SETUP',
+          description: 'Real ClaudePoint system initialized',
+          details: 'Internal checkpoint system with tar compression and smart exclusions'
+        }];
+      }
+      
+      const data = await fs.promises.readFile(changelogPath, 'utf8');
+      const changelog = JSON.parse(data);
+      
+      return Array.isArray(changelog) ? changelog : [];
+    } catch (error) {
+      console.error(`Failed to get changelog: ${error}`);
+      return [];
     }
-    const result = await (globalThis as any).local__claudepoint__get_changelog({});
-    return result.entries || [];
   }
 
   async setChangelog(entry: ChangelogEntry): Promise<void> {
-    if (isTestMode()) {
-      // console.log(`[TEST MODE] Setting changelog entry: ${entry.description}`);
-      return;
+    console.log(`Adding REAL changelog entry: ${entry.description}`);
+    
+    try {
+      const changelogPath = path.join(CHECKPOINT_DIR, 'changelog.json');
+      
+      // Load existing changelog
+      let changelog: ChangelogEntry[] = [];
+      const changelogExists = await fs.promises.access(changelogPath).then(() => true).catch(() => false);
+      
+      if (changelogExists) {
+        const data = await fs.promises.readFile(changelogPath, 'utf8');
+        changelog = JSON.parse(data);
+      }
+      
+      // Add new entry with timestamp
+      const entryWithTimestamp = {
+        ...entry,
+        timestamp: new Date().toISOString()
+      };
+      
+      changelog.unshift(entryWithTimestamp); // Add to beginning (newest first)
+      
+      // Keep only last 100 entries
+      if (changelog.length > 100) {
+        changelog = changelog.slice(0, 100);
+      }
+      
+      // Save updated changelog
+      await fs.promises.writeFile(changelogPath, JSON.stringify(changelog, null, 2));
+      
+      console.log(`Changelog entry added: ${entry.action_type}`);
+    } catch (error) {
+      console.error(`Failed to set changelog: ${error}`);
+      throw error;
     }
-    await (globalThis as any).local__claudepoint__set_changelog(entry);
   }
 }
 

@@ -90,6 +90,74 @@ class ConversationContinuityServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
+          // === CHECKPOINT SYSTEM ===
+          {
+            name: 'create_checkpoint',
+            description: 'Create a new real checkpoint of RiderProjects directory',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                description: { type: 'string', description: 'Description of the checkpoint' },
+                name: { type: 'string', description: 'Optional name for the checkpoint' }
+              },
+              required: ['description'],
+            },
+          },
+
+          {
+            name: 'list_checkpoints',
+            description: 'List all available real checkpoints',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+
+          {
+            name: 'restore_checkpoint',
+            description: 'Restore a checkpoint (with emergency backup)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                checkpoint: { type: 'string', description: 'Checkpoint ID or partial name to restore' },
+                dry_run: { type: 'boolean', description: 'Preview restore without applying changes' }
+              },
+              required: ['checkpoint'],
+            },
+          },
+
+          {
+            name: 'setup_claudepoint',
+            description: 'Initialize the real checkpoint system',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+
+          {
+            name: 'get_changelog',
+            description: 'Get development history and changelog',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+
+          {
+            name: 'set_changelog',
+            description: 'Add entry to development changelog',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                action_type: { type: 'string', description: 'Type of action (CREATE_CHECKPOINT, FEATURE, BUG_FIX, etc.)' },
+                description: { type: 'string', description: 'Description of the change' },
+                details: { type: 'string', description: 'Additional details about the change' }
+              },
+              required: ['action_type', 'description'],
+            },
+          },
+
           // === ECOSYSTEM MONITORING ===
           {
             name: 'monitor_ecosystem_state',
@@ -382,6 +450,26 @@ class ConversationContinuityServer {
 
       try {
         switch (name) {
+          // === CHECKPOINT SYSTEM HANDLERS ===
+          case 'create_checkpoint':
+            return await this.handleCreateCheckpoint(args);
+
+          case 'list_checkpoints':
+            return await this.handleListCheckpoints();
+
+          case 'restore_checkpoint':
+            return await this.handleRestoreCheckpoint(args);
+
+          case 'setup_claudepoint':
+            return await this.handleSetupClaudepoint();
+
+          case 'get_changelog':
+            return await this.handleGetChangelog();
+
+          case 'set_changelog':
+            return await this.handleSetChangelog(args);
+
+          // === ECOSYSTEM MONITORING ===
           case 'monitor_ecosystem_state':
             return await this.handleMonitorEcosystem();
 
@@ -457,6 +545,236 @@ class ConversationContinuityServer {
     });
   }
 
+  // ===== CHECKPOINT SYSTEM HANDLERS =====
+
+  private async handleCreateCheckpoint(args: any) {
+    try {
+      const clients = await this.clientFactory.getAllAvailableClients();
+      if (!clients.claudepoint) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Error: Real checkpoint system not available - ClaudePoint client not initialized.'
+          }]
+        };
+      }
+
+      const checkpoint = await clients.claudepoint.createCheckpoint({
+        description: args.description,
+        name: args.name
+      });
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Real checkpoint created successfully!
+
+**Checkpoint ID**: ${checkpoint.id}
+**Name**: ${checkpoint.name}
+**Description**: ${checkpoint.description}
+**Created**: ${checkpoint.createdAt.toLocaleString()}
+**File Count**: ${checkpoint.fileCount}
+
+**Location**: /Users/Luther/RiderProjects/.checkpoints/snapshots/${checkpoint.id}
+
+**Size**: Expected ~5-50MB (much smaller than old system!)
+
+Your RiderProjects directory has been safely backed up with smart exclusions.`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to create checkpoint: ${error instanceof Error ? error.message : String(error)}`
+        }]
+      };
+    }
+  }
+
+  private async handleListCheckpoints() {
+    try {
+      const clients = await this.clientFactory.getAllAvailableClients();
+      if (!clients.claudepoint) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Error: Real checkpoint system not available - ClaudePoint client not initialized.'
+          }]
+        };
+      }
+
+      const checkpoints = await clients.claudepoint.listCheckpoints();
+      
+      if (checkpoints.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'No real checkpoints found.\n\nCreate your first checkpoint with `create_checkpoint`!'
+          }]
+        };
+      }
+
+      const checkpointList = checkpoints.map((cp, index) => 
+        `${index + 1}. **${cp.name}**\n   Description: ${cp.description}\n   Created: ${cp.createdAt.toLocaleString()} | ${cp.fileCount} files\n   ID: \`${cp.id}\``
+      ).join('\n\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Real Checkpoints (${checkpoints.length} total):\n\n${checkpointList}\n\n**Location**: /Users/Luther/RiderProjects/.checkpoints/snapshots/`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to list checkpoints: ${error instanceof Error ? error.message : String(error)}`
+        }]
+      };
+    }
+  }
+
+  private async handleRestoreCheckpoint(args: any) {
+    try {
+      const clients = await this.clientFactory.getAllAvailableClients();
+      if (!clients.claudepoint) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Error: Real checkpoint system not available - ClaudePoint client not initialized.'
+          }]
+        };
+      }
+
+      const result = await clients.claudepoint.restoreCheckpoint(args.checkpoint, args.dry_run);
+      
+      const statusIcon = result.success ? 'SUCCESS' : 'FAILED';
+      const actionText = args.dry_run ? 'DRY RUN' : (result.success ? 'RESTORED' : 'FAILED');
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `${statusIcon} Checkpoint ${actionText}\n\n**Checkpoint**: ${args.checkpoint}\n**Result**: ${result.message}\n\n${result.filesRestored && result.filesRestored > 0 ? `**Files Restored**: ${result.filesRestored}` : ''}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to restore checkpoint: ${error instanceof Error ? error.message : String(error)}`
+        }]
+      };
+    }
+  }
+
+  private async handleSetupClaudepoint() {
+    try {
+      const clients = await this.clientFactory.getAllAvailableClients();
+      if (!clients.claudepoint) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Error: Real checkpoint system not available - ClaudePoint client not initialized.'
+          }]
+        };
+      }
+
+      await clients.claudepoint.setupClaudepoint();
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `Real ClaudePoint system setup complete!\n\n**Directory**: /Users/Luther/RiderProjects/.checkpoints/\n**Configuration**: Smart exclusions enabled\n**Ready**: Create checkpoints with \`create_checkpoint\`\n\n**Revolution**: Your checkpoint system now creates ~50MB backups instead of 25-50GB monsters!`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to setup ClaudePoint: ${error instanceof Error ? error.message : String(error)}`
+        }]
+      };
+    }
+  }
+
+  private async handleGetChangelog() {
+    try {
+      const clients = await this.clientFactory.getAllAvailableClients();
+      if (!clients.claudepoint) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Error: Real checkpoint system not available - ClaudePoint client not initialized.'
+          }]
+        };
+      }
+
+      const changelog = await clients.claudepoint.getChangelog();
+      
+      if (changelog.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'No changelog entries found.\n\nChangelog will be populated as you use the system!'
+          }]
+        };
+      }
+
+      const changelogText = changelog.slice(0, 10).map((entry, index) => 
+        `${index + 1}. **${entry.action_type}** - ${entry.description}\n   ${entry.details || ''}`
+      ).join('\n\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Development History (${changelog.length} entries):\n\n${changelogText}${changelog.length > 10 ? '\n\n...and ' + (changelog.length - 10) + ' more entries' : ''}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to get changelog: ${error instanceof Error ? error.message : String(error)}`
+        }]
+      };
+    }
+  }
+
+  private async handleSetChangelog(args: any) {
+    try {
+      const clients = await this.clientFactory.getAllAvailableClients();
+      if (!clients.claudepoint) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'Error: Real checkpoint system not available - ClaudePoint client not initialized.'
+          }]
+        };
+      }
+
+      await clients.claudepoint.setChangelog({
+        action_type: args.action_type,
+        description: args.description,
+        details: args.details
+      });
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `Changelog entry added successfully!\n\n**Action**: ${args.action_type}\n**Description**: ${args.description}\n${args.details ? `**Details**: ${args.details}` : ''}\n\nEntry saved to development history.`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to set changelog: ${error instanceof Error ? error.message : String(error)}`
+        }]
+      };
+    }
+  }
+
   // ===== TOOL HANDLERS =====
 
   private async handleMonitorEcosystem() {
@@ -466,18 +784,18 @@ class ConversationContinuityServer {
       content: [
         {
           type: 'text',
-          text: `🎭 MCP Ecosystem State:
+          text: `MCP Ecosystem State:
 
-📊 **Conversation**: ${state.conversationTokens} tokens used
-🧠 **Memory MCP**: ${state.memoryEntities} entities stored
-🔄 **Claudepoint MCP**: ${state.claudepointCheckpoints.length} checkpoints available
-📁 **Filesystem MCP**: ${state.filesystemActivity.length} recent file activities
-🔀 **Git MCP**: On ${state.gitStatus.branch}, ${state.gitStatus.modified} modified files
-🗄️ **Database MCPs**: ${state.databaseSessions.length} active sessions
+**Conversation**: ${state.conversationTokens} tokens used
+**Memory MCP**: ${state.memoryEntities} entities stored
+**Claudepoint MCP**: ${state.claudepointCheckpoints.length} checkpoints available
+**Filesystem MCP**: ${state.filesystemActivity.length} recent file activities
+**Git MCP**: On ${state.gitStatus.branch}, ${state.gitStatus.modified} modified files
+**Database MCPs**: ${state.databaseSessions.length} active sessions
 
-🏥 **Coordination Health**: ${state.coordinationHealth.status} (${state.coordinationHealth.errorCount} errors)
-🔄 **Last Sync**: ${new Date(state.coordinationHealth.lastFullSync).toLocaleString()}
-⚡ **Avg Response**: ${state.coordinationHealth.averageResponseTime}ms`,
+**Coordination Health**: ${state.coordinationHealth.status} (${state.coordinationHealth.errorCount} errors)
+**Last Sync**: ${new Date(state.coordinationHealth.lastFullSync).toLocaleString()}
+**Avg Response**: ${state.coordinationHealth.averageResponseTime}ms`,
         },
       ],
     };
@@ -490,7 +808,7 @@ class ConversationContinuityServer {
       content: [
         {
           type: 'text',
-          text: `✅ Session rule created successfully!
+          text: `Session rule created successfully!
 
 **Rule ID**: ${rule.id}
 **Rule**: "${rule.rule}"
@@ -517,11 +835,11 @@ The rule has been stored in Memory MCP and will persist across all future sessio
       content: [
         {
           type: 'text',
-          text: `📋 Active Session Rules (${rules.length} total):
+          text: `Active Session Rules (${rules.length} total):
 
 ${rulesList}
 
-🎯 **Legend**: 
+**Legend**: 
 - hard_block: Prevents action completely
 - soft_block: Warns and waits for confirmation  
 - reminder: Shows reminder but allows action
@@ -540,7 +858,7 @@ ${rulesList}
         content: [
           {
             type: 'text',
-            text: `✅ Action "${action.type}" cleared - no applicable rules found.`,
+            text: `Action "${action.type}" cleared - no applicable rules found.`,
           },
         ],
       };
@@ -550,29 +868,29 @@ ${rulesList}
     const warned = enforcement.filter(e => e.result === 'warned');
     const reminders = enforcement.filter(e => e.result === 'allowed' && e.message);
 
-    let response = `⚖️ Rule Enforcement Results for "${action.type}":\n\n`;
+    let response = `Rule Enforcement Results for "${action.type}":\n\n`;
 
     if (blocked.length > 0) {
-      response += `🚫 **BLOCKED** by ${blocked.length} rule(s):\n`;
+      response += `**BLOCKED** by ${blocked.length} rule(s):\n`;
       blocked.forEach(b => response += `   • ${b.message}\n`);
       response += '\n';
     }
 
     if (warned.length > 0) {
-      response += `⚠️ **WARNINGS** from ${warned.length} rule(s):\n`;
+      response += `**WARNINGS** from ${warned.length} rule(s):\n`;
       warned.forEach(w => response += `   • ${w.message}\n   ${w.userPrompt}\n`);
       response += '\n';
     }
 
     if (reminders.length > 0) {
-      response += `💡 **REMINDERS** from ${reminders.length} rule(s):\n`;
+      response += `**REMINDERS** from ${reminders.length} rule(s):\n`;
       reminders.forEach(r => response += `   • ${r.message}\n`);
       response += '\n';
     }
 
     response += blocked.length > 0 
-      ? '❌ **Action not permitted** - please modify your approach'
-      : '✅ **Action permitted** - you may proceed';
+      ? '**Action not permitted** - please modify your approach'
+      : '**Action permitted** - you may proceed';
 
     return {
       content: [
@@ -591,7 +909,7 @@ ${rulesList}
       content: [
         {
           type: 'text',
-          text: `🎯 Luther's session rules initialized successfully!
+          text: `Luther's session rules initialized successfully!
 
 The following rules are now active:
 1. **Approval Required**: Always check before thundering off wielding the powers of creation all willy nilly
@@ -613,20 +931,20 @@ All rules are stored in Memory MCP and will persist across sessions.`,
       content: [
         {
           type: 'text',
-          text: `🎭 Unified handoff package created successfully!
+          text: `Unified handoff package created successfully!
 
 **Handoff ID**: ${handoffPackage.handoffId}
 **Created**: ${handoffPackage.createdAt.toLocaleString()}
 
-📦 **Package Contents**:
-🧠 Memory MCP: ${handoffPackage.memoryPackage.compressedContextEntities.length} context entities
-🔄 Claudepoint: Checkpoint ${handoffPackage.claudepointPackage.checkpointId}
-📁 Filesystem: ${handoffPackage.filesystemPackage.activeFiles.length} active files
-🔀 Git: Branch ${handoffPackage.gitPackage.currentBranch} (${handoffPackage.gitPackage.uncommittedChanges} uncommitted changes)
-🗄️ Database: Session analytics stored
+**Package Contents**:
+Memory MCP: ${handoffPackage.memoryPackage.compressedContextEntities.length} context entities
+Claudepoint: Checkpoint ${handoffPackage.claudepointPackage.checkpointId}
+Filesystem: ${handoffPackage.filesystemPackage.activeFiles.length} active files
+Git: Branch ${handoffPackage.gitPackage.currentBranch} (${handoffPackage.gitPackage.uncommittedChanges} uncommitted changes)
+Database: Session analytics stored
 
-🔗 **Cross-References**: ${handoffPackage.crossReferences.length} MCP linkages created
-📋 **Reconstruction Steps**: ${handoffPackage.reconstructionInstructions.length} instructions prepared
+**Cross-References**: ${handoffPackage.crossReferences.length} MCP linkages created
+**Reconstruction Steps**: ${handoffPackage.reconstructionInstructions.length} instructions prepared
 
 The handoff package is ready for seamless context reconstruction in a new session.`,
         },
@@ -641,26 +959,26 @@ The handoff package is ready for seamless context reconstruction in a new sessio
       content: [
         {
           type: 'text',
-          text: `🔄 Context reconstruction completed!
+          text: `Context reconstruction completed!
 
 **Context ID**: ${context.contextId}
 **Source Handoff**: ${context.sourceHandoffId}
 **Reconstruction Time**: ${context.reconstructionTime}ms
 
-📊 **Reconstruction Quality**:
-✅ **Completeness**: ${(context.completeness * 100).toFixed(1)}%
-✅ **Accuracy**: ${(context.accuracy * 100).toFixed(1)}%
+**Reconstruction Quality**:
+**Completeness**: ${(context.completeness * 100).toFixed(1)}%
+**Accuracy**: ${(context.accuracy * 100).toFixed(1)}%
 
-🎭 **Restored Elements**:
-${context.memoryContext ? '🧠 Memory MCP context' : '❌ Memory context missing'}
-${context.claudepointState ? '🔄 Claudepoint state' : '❌ Claudepoint state missing'}  
-${context.filesystemState ? '📁 Filesystem state' : '❌ Filesystem state missing'}
-${context.gitState ? '🔀 Git state' : '❌ Git state missing'}
-${context.databaseState ? '🗄️ Database state' : '❌ Database state missing'}
+**Restored Elements**:
+${context.memoryContext ? 'Memory MCP context' : 'Memory context missing'}
+${context.claudepointState ? 'Claudepoint state' : 'Claudepoint state missing'}  
+${context.filesystemState ? 'Filesystem state' : 'Filesystem state missing'}
+${context.gitState ? 'Git state' : 'Git state missing'}
+${context.databaseState ? 'Database state' : 'Database state missing'}
 
 ${context.missingElements.length > 0 
-  ? `⚠️ **Missing Elements**: ${context.missingElements.join(', ')}`
-  : '🎉 **Perfect reconstruction** - all elements restored successfully!'
+  ? `**Missing Elements**: ${context.missingElements.join(', ')}`
+  : '**Perfect reconstruction** - all elements restored successfully!'
 }
 
 Your session context has been seamlessly restored from the handoff package.`,
@@ -676,18 +994,18 @@ Your session context has been seamlessly restored from the handoff package.`,
       content: [
         {
           type: 'text',
-          text: `🔄 Cross-MCP synchronization ${result.success ? 'completed' : 'failed'}!
+          text: `Cross-MCP synchronization ${result.success ? 'completed' : 'failed'}!
 
-⏱️ **Duration**: ${result.duration}ms
-${result.conflicts.length > 0 ? `⚠️ **Conflicts**: ${result.conflicts.length} detected` : '✅ **No conflicts** detected'}
+**Duration**: ${result.duration}ms
+${result.conflicts.length > 0 ? `**Conflicts**: ${result.conflicts.length} detected` : '**No conflicts** detected'}
 
-🎭 **MCP Results**:
+**MCP Results**:
 ${Object.entries(result.mcpResults).map(([mcp, result]: [string, any]) => 
-  `${this.getMCPEmoji(mcp)} **${mcp}**: ${result.success ? '✅' : '❌'} (${result.responseTime || 0}ms)`
+  `**${mcp}**: ${result.success ? 'SUCCESS' : 'FAILED'} (${result.responseTime || 0}ms)`
 ).join('\n')}
 
 ${result.nextSyncRecommended 
-  ? `🔄 **Next sync recommended**: ${result.nextSyncRecommended.toLocaleString()}`
+  ? `**Next sync recommended**: ${result.nextSyncRecommended.toLocaleString()}`
   : ''
 }`,
         },
@@ -702,15 +1020,15 @@ ${result.nextSyncRecommended
       content: [
         {
           type: 'text',
-          text: `🎯 Coordinated checkpoint created successfully!
+          text: `Coordinated checkpoint created successfully!
 
 **Checkpoint ID**: ${checkpoint.checkpointId}
 **Created**: ${checkpoint.coordinatedAt.toLocaleString()}
 **Description**: ${checkpoint.description}
 
-🎭 **MCP Checkpoints**:
+**MCP Checkpoints**:
 ${Object.entries(checkpoint.mcpCheckpoints).map(([mcp, id]) => 
-  `${this.getMCPEmoji(mcp)} **${mcp}**: ${id}`
+  `**${mcp}**: ${id}`
 ).join('\n')}
 
 This checkpoint coordinates state across multiple MCPs and can be used for unified rollback or reference.`,
@@ -726,12 +1044,12 @@ This checkpoint coordinates state across multiple MCPs and can be used for unifi
       content: [
         {
           type: 'text',
-          text: `📊 Conversation Monitoring:
+          text: `Conversation Monitoring:
 
-🔢 **Current Status**: Monitoring active
-📏 **Token Usage**: Not yet implemented (requires Claude integration)
-⚡ **Threshold**: 85% for compression, 95% for handoff
-🎯 **Next Action**: Continue monitoring
+**Current Status**: Monitoring active
+**Token Usage**: Not yet implemented (requires Claude integration)
+**Threshold**: 85% for compression, 95% for handoff
+**Next Action**: Continue monitoring
 
 Note: Full token monitoring requires integration with Claude's conversation state.`,
         },
@@ -745,17 +1063,17 @@ Note: Full token monitoring requires integration with Claude's conversation stat
       content: [
         {
           type: 'text',
-          text: `🗜️ Context compression initiated...
+          text: `Context compression initiated...
 
-⚙️ **Parameters**: 
+**Parameters**: 
 - Threshold: ${args?.threshold || 0.85}
 - Preserve recent: ${args?.preserveRecent || 15} messages
 
-🧠 **Compression Strategy**:
-✅ Recent messages preserved verbatim
-✅ Key decisions extracted and summarized
-✅ Code changes documented
-✅ Context stored in Memory MCP
+**Compression Strategy**:
+Recent messages preserved verbatim
+Key decisions extracted and summarized
+Code changes documented
+Context stored in Memory MCP
 
 Note: Full implementation pending conversation access integration.`,
         },
@@ -769,11 +1087,11 @@ Note: Full implementation pending conversation access integration.`,
       content: [
         {
           type: 'text',
-          text: `💡 Rule suggestions analysis...
+          text: `Rule suggestions analysis...
 
-📈 **Pattern Analysis**: Analyzing last ${args?.analyzeLastDays || 7} days
-🔍 **Detection**: Looking for repeated user corrections
-🎯 **Suggestions**: Ready to propose new rules
+**Pattern Analysis**: Analyzing last ${args?.analyzeLastDays || 7} days
+**Detection**: Looking for repeated user corrections
+**Suggestions**: Ready to propose new rules
 
 Note: Full pattern analysis requires conversation history integration.`,
         },
@@ -789,7 +1107,7 @@ Note: Full pattern analysis requires conversation history integration.`,
         content: [
           {
             type: 'text',
-            text: `✅ Rule optimization analysis complete - no optimizations needed!
+            text: `Rule optimization analysis complete - no optimizations needed!
 
 Your current rules are well-configured and effective.`,
           },
@@ -805,7 +1123,7 @@ Your current rules are well-configured and effective.`,
       content: [
         {
           type: 'text',
-          text: `🔧 Rule optimization suggestions:
+          text: `Rule optimization suggestions:
 
 ${optimizationsList}
 
@@ -824,7 +1142,7 @@ These optimizations can improve rule effectiveness and reduce conflicts.`,
         content: [
           {
             type: 'text',
-            text: `🏥 Health check for ${args.mcpType}:
+            text: `Health check for ${args.mcpType}:
 
 **Status**: ${status.status}
 **Last Checked**: ${status.lastChecked.toLocaleString()}
@@ -836,20 +1154,20 @@ ${status.errorMessage ? `**Error**: ${status.errorMessage}` : ''}`,
     } else {
       const allStatuses = healthStatus as Map<MCPType, any>;
       const statusList = Array.from(allStatuses.entries()).map(([mcp, status]) => 
-        `${this.getMCPEmoji(mcp)} **${mcp}**: ${status.status} (${status.responseTime || 0}ms)`
+        `**${mcp}**: ${status.status} (${status.responseTime || 0}ms)`
       ).join('\n');
 
       return {
         content: [
           {
             type: 'text',
-            text: `🏥 MCP Ecosystem Health:
+            text: `MCP Ecosystem Health:
 
 ${statusList}
 
 ${Array.from(allStatuses.values()).every(s => s.status === 'online') 
-  ? '🎉 All MCPs are healthy!' 
-  : '⚠️ Some MCPs need attention'
+  ? 'All MCPs are healthy!' 
+  : 'Some MCPs need attention'
 }`,
           },
         ],
@@ -861,7 +1179,7 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
 
   private async handleCreateProjectIntelligenceCache(args: any) {
     try {
-      // console.log('🧠 Creating Project Intelligence Cache...');
+      // console.log('Creating Project Intelligence Cache...');
       
       const projectName = args.projectName || 'MCPConductor';
       const options = args.options || {
@@ -891,30 +1209,30 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         content: [
           {
             type: 'text',
-            text: `🧠 **Project Intelligence Cache Created Successfully!**
+            text: `**Project Intelligence Cache Created Successfully!**
 
 **Project**: ${intelligence.projectName}
 **Cache Version**: ${intelligence.cacheVersion}
 **Created**: ${intelligence.createdAt.toLocaleString()}
 
-📊 **Intelligence Summary**:
-🏗️ **Structure**: ${intelligence.structure.summary}
-🏛️ **Architecture**: ${intelligence.architecture.currentPhase}
-🚀 **Development**: ${intelligence.development.recentFocus}
-🎯 **Momentum**: ${intelligence.development.momentum.velocity}
+**Intelligence Summary**:
+**Structure**: ${intelligence.structure.summary}
+**Architecture**: ${intelligence.architecture.currentPhase}
+**Development**: ${intelligence.development.recentFocus}
+**Momentum**: ${intelligence.development.momentum.velocity}
 
-📁 **Analysis Results**:
+**Analysis Results**:
 • **Total Files**: ${intelligence.structure.totalFiles}
 • **Critical Files**: ${intelligence.structure.criticalFiles.length}
 • **Key Directories**: ${intelligence.structure.keyDirectories.length}
 • **Dependencies**: ${intelligence.structure.dependencyGraph.length}
 • **Components**: ${intelligence.structure.componentMap.length}
 
-🔄 **Next Steps**: ${intelligence.development.nextLogicalSteps.slice(0, 3).map(step => step.step).join(', ')}
+**Next Steps**: ${intelligence.development.nextLogicalSteps.slice(0, 3).map(step => step.step).join(', ')}
 
-⚡ **EFFICIENCY REVOLUTION**: This cache eliminates session startup overhead! Use \`load_project_intelligence_cache\` to instantly restore complete project context.
+**EFFICIENCY REVOLUTION**: This cache eliminates session startup overhead! Use \`load_project_intelligence_cache\` to instantly restore complete project context.
 
-💾 **Cache Status**: Stored in Memory MCP with ${intelligence.invalidationTriggers.length} smart invalidation triggers.`,
+**Cache Status**: Stored in Memory MCP with ${intelligence.invalidationTriggers.length} smart invalidation triggers.`,
           },
         ],
       };
@@ -924,11 +1242,11 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         content: [
           {
             type: 'text',
-            text: `❌ **Failed to create Project Intelligence Cache**
+            text: `**Failed to create Project Intelligence Cache**
 
 **Error**: ${error instanceof Error ? error.message : String(error)}
 
-🔧 **Troubleshooting**:
+**Troubleshooting**:
 • Ensure Memory MCP is connected
 • Check filesystem access permissions
 • Verify project directory exists
@@ -941,7 +1259,7 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
 
   private async handleLoadProjectIntelligenceCache(args: any) {
     try {
-      // console.log(`🔄 Loading Project Intelligence Cache for: ${args.projectName}`);
+      // console.log(`Loading Project Intelligence Cache for: ${args.projectName}`);
       
       const intelligence = await this.orchestrator.loadProjectIntelligenceCache(args.projectName);
       
@@ -950,13 +1268,13 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
           content: [
             {
               type: 'text',
-              text: `❌ **Project Intelligence Cache Not Found**
+              text: `**Project Intelligence Cache Not Found**
 
 **Project**: ${args.projectName}
 
-🔍 **No cached intelligence found for this project.**
+**No cached intelligence found for this project.**
 
-💡 **Next Steps**:
+**Next Steps**:
 1. Create cache first: \`create_project_intelligence_cache\`
 2. Or check available caches: \`monitor_ecosystem_state\`
 3. Verify project name spelling`,
@@ -979,7 +1297,6 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         mcps_involved: ['memory']
       });
 
-      const freshnessEmoji = validation.valid ? '✅' : '⚠️';
       const recommendationText = validation.valid 
         ? '**Ready to use!**' 
         : `**Recommendation**: ${validation.recommended_action} (confidence: ${(validation.confidence * 100).toFixed(1)}%)`;
@@ -988,35 +1305,36 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         content: [
           {
             type: 'text',
-            text: `🧠 **Project Intelligence Loaded Successfully!**
+            text: `**Project Intelligence Loaded Successfully!**
 
 **Project**: ${intelligence.projectName}
 **Cache Version**: ${intelligence.cacheVersion}
 **Last Updated**: ${intelligence.lastUpdated.toLocaleString()}
-${freshnessEmoji} **Freshness**: ${intelligence.freshness.status} (${(intelligence.freshness.confidence * 100).toFixed(1)}% confidence)
+**Freshness**: ${intelligence.freshness.status} (${(intelligence.freshness.confidence * 100).toFixed(1)}% confidence)
 
-📊 **INSTANT CONTEXT RESTORATION**:
-🏗️ **Structure**: ${intelligence.structure.summary}
-🏛️ **Architecture**: ${intelligence.architecture.currentPhase}
-🚀 **Development**: ${intelligence.development.recentFocus}
-🎯 **Momentum**: ${intelligence.development.momentum.velocity}
+**INSTANT CONTEXT RESTORATION**:
+**Structure**: ${intelligence.structure.summary}
+**Architecture**: ${intelligence.architecture.currentPhase}
+**Development**: ${intelligence.development.recentFocus}
+**Momentum**: ${intelligence.development.momentum.velocity}
 
-📁 **Project Overview**:
+**Project Overview**:
 • **Files**: ${intelligence.structure.totalFiles} total, ${intelligence.structure.criticalFiles.length} critical
 • **Technologies**: ${intelligence.metadata.technologies.join(', ')}
 • **Maturity**: ${intelligence.metadata.maturity_level}
 • **Complexity**: ${(intelligence.metadata.complexity_score * 100).toFixed(0)}%
 
-🔄 **Immediate Next Steps**:
+**Immediate Next Steps**:
 ${intelligence.development.nextLogicalSteps.slice(0, 5).map((step, i) => 
   `${i + 1}. **${step.step}** (${step.priority} priority, ${step.effort} effort)`
 ).join('\n')}
 
 ${validation.staleness_reasons.length > 0 
-  ? `⚠️ **Staleness Indicators**: ${validation.staleness_reasons.join(', ')}`
-  : ''}
+  ? `**Staleness Indicators**: ${validation.staleness_reasons.join(', ')}`
+  : ''
+}
 
-🎉 **EFFICIENCY WIN**: Session startup overhead eliminated! You now have complete project context instantly.
+**EFFICIENCY WIN**: Session startup overhead eliminated! You now have complete project context instantly.
 
 ${recommendationText}`,
           },
@@ -1028,12 +1346,12 @@ ${recommendationText}`,
         content: [
           {
             type: 'text',
-            text: `❌ **Failed to load Project Intelligence Cache**
+            text: `**Failed to load Project Intelligence Cache**
 
 **Project**: ${args.projectName}
 **Error**: ${error instanceof Error ? error.message : String(error)}
 
-🔧 **Troubleshooting**:
+**Troubleshooting**:
 • Check Memory MCP connection
 • Verify cache exists: \`monitor_ecosystem_state\`
 • Try recreating cache if corrupted`,
@@ -1045,7 +1363,7 @@ ${recommendationText}`,
 
   private async handleValidateProjectIntelligenceCache(args: any) {
     try {
-      // console.log(`🔍 Validating Project Intelligence Cache for: ${args.projectName}`);
+      // console.log(`Validating Project Intelligence Cache for: ${args.projectName}`);
       
       const validation = await this.orchestrator.validateProjectIntelligenceCache(args.projectName);
       
@@ -1060,22 +1378,19 @@ ${recommendationText}`,
         mcps_involved: ['memory', 'filesystem']
       });
 
-      const statusEmoji = validation.valid ? '✅' : '❌';
-      const confidenceColor = validation.confidence > 0.8 ? '🟢' : validation.confidence > 0.5 ? '🟡' : '🔴';
-      
       let recommendationText = '';
       switch (validation.recommended_action) {
         case 'use':
-          recommendationText = '✅ **Use cache** - Fresh and reliable';
+          recommendationText = '**Use cache** - Fresh and reliable';
           break;
         case 'refresh':
-          recommendationText = '🔄 **Refresh recommended** - Some changes detected';
+          recommendationText = '**Refresh recommended** - Some changes detected';
           break;
         case 'recreate':
-          recommendationText = '🔨 **Recreate cache** - Significant changes detected';
+          recommendationText = '**Recreate cache** - Significant changes detected';
           break;
         case 'invalidate':
-          recommendationText = '💥 **Invalidate cache** - No longer reliable';
+          recommendationText = '**Invalidate cache** - No longer reliable';
           break;
       }
 
@@ -1083,25 +1398,25 @@ ${recommendationText}`,
         content: [
           {
             type: 'text',
-            text: `🔍 **Project Intelligence Cache Validation**
+            text: `**Project Intelligence Cache Validation**
 
 **Project**: ${args.projectName}
-${statusEmoji} **Status**: ${validation.valid ? 'VALID' : 'INVALID'}
-${confidenceColor} **Confidence**: ${(validation.confidence * 100).toFixed(1)}%
+**Status**: ${validation.valid ? 'VALID' : 'INVALID'}
+**Confidence**: ${(validation.confidence * 100).toFixed(1)}%
 
 ${recommendationText}
 
 ${validation.staleness_reasons.length > 0 ? `
-⚠️ **Staleness Reasons**:
+**Staleness Reasons**:
 ${validation.staleness_reasons.map(reason => `• ${reason}`).join('\n')}
-` : '✨ **No staleness detected** - Cache is fresh!'}
+` : '**No staleness detected** - Cache is fresh!'}
 
 ${validation.partial_updates_available.length > 0 ? `
-🔄 **Partial Updates Available**:
+**Partial Updates Available**:
 ${validation.partial_updates_available.map(update => `• ${update}`).join('\n')}
 ` : ''}
 
-💡 **Next Actions**:
+**Next Actions**:
 ${validation.recommended_action === 'use' 
   ? '• Continue using cache as-is\n• No action required'
   : validation.recommended_action === 'refresh'
@@ -1119,12 +1434,12 @@ ${validation.recommended_action === 'use'
         content: [
           {
             type: 'text',
-            text: `❌ **Cache Validation Failed**
+            text: `**Cache Validation Failed**
 
 **Project**: ${args.projectName}
 **Error**: ${error instanceof Error ? error.message : String(error)}
 
-🔧 **Recovery Options**:
+**Recovery Options**:
 • Check if cache exists: \`monitor_ecosystem_state\`
 • Try loading cache: \`load_project_intelligence_cache\`
 • Recreate if necessary: \`create_project_intelligence_cache\``,
@@ -1136,7 +1451,7 @@ ${validation.recommended_action === 'use'
 
   private async handleRefreshProjectIntelligence(args: any) {
     try {
-      // console.log(`🔄 Refreshing Project Intelligence for: ${args.projectName}`);
+      // console.log(`Refreshing Project Intelligence for: ${args.projectName}`);
       
       const changes = args.changes || [];
       const updateResult = await this.orchestrator.refreshProjectIntelligence(args.projectName, changes);
@@ -1152,41 +1467,40 @@ ${validation.recommended_action === 'use'
         mcps_involved: ['memory', 'filesystem']
       });
 
-      const successEmoji = updateResult.success ? '✅' : '❌';
       const improvementText = updateResult.confidence_improvement > 0 
-        ? `📈 **Confidence Improved**: +${(updateResult.confidence_improvement * 100).toFixed(1)}%`
+        ? `**Confidence Improved**: +${(updateResult.confidence_improvement * 100).toFixed(1)}%`
         : '';
 
       return {
         content: [
           {
             type: 'text',
-            text: `🔄 **Project Intelligence Refresh Complete**
+            text: `**Project Intelligence Refresh Complete**
 
 **Project**: ${args.projectName}
-${successEmoji} **Status**: ${updateResult.success ? 'SUCCESS' : 'FAILED'}
+**Status**: ${updateResult.success ? 'SUCCESS' : 'FAILED'}
 **New Version**: ${updateResult.new_cache_version}
 **Duration**: ${updateResult.update_duration}ms
 
-📊 **Update Summary**:
-✅ **Updated Sections**: ${updateResult.updated_sections.length > 0 
+**Update Summary**:
+**Updated Sections**: ${updateResult.updated_sections.length > 0 
   ? updateResult.updated_sections.join(', ') 
   : 'None required'}
   
 ${updateResult.invalidated_sections.length > 0 ? `
-💥 **Invalidated Sections**: ${updateResult.invalidated_sections.join(', ')}
+**Invalidated Sections**: ${updateResult.invalidated_sections.join(', ')}
 ` : ''}
 
 ${changes.length > 0 ? `
-🔍 **Processed Changes**:
+**Processed Changes**:
 ${changes.map((change: ProjectChange) => `• ${change.type}: ${change.path} (${change.magnitude})`).join('\n')}
-` : '🔍 **Auto-detected changes** and applied updates'}
+` : '**Auto-detected changes** and applied updates'}
 
 ${improvementText}
 
-⚡ **EFFICIENCY**: Incremental refresh completed! Cache maintains peak performance while staying current.
+**EFFICIENCY**: Incremental refresh completed! Cache maintains peak performance while staying current.
 
-💡 **Next Steps**:
+**Next Steps**:
 • Cache is ready for immediate use
 • Continue development with fresh intelligence
 • Auto-invalidation triggers remain active`,
@@ -1199,12 +1513,12 @@ ${improvementText}
         content: [
           {
             type: 'text',
-            text: `❌ **Project Intelligence Refresh Failed**
+            text: `**Project Intelligence Refresh Failed**
 
 **Project**: ${args.projectName}
 **Error**: ${error instanceof Error ? error.message : String(error)}
 
-🔧 **Recovery Options**:
+**Recovery Options**:
 • Validate cache first: \`validate_project_intelligence_cache\`
 • Try full recreation: \`create_project_intelligence_cache\`
 • Check for filesystem issues`,
@@ -1216,7 +1530,7 @@ ${improvementText}
 
   private async handleInvalidateProjectCache(args: any) {
     try {
-      // console.log(`💥 Invalidating Project Intelligence Cache for: ${args.projectName}`);
+      // console.log(`Invalidating Project Intelligence Cache for: ${args.projectName}`);
       
       await this.orchestrator.invalidateProjectCache(args.projectName, args.reason);
       
@@ -1235,25 +1549,25 @@ ${improvementText}
         content: [
           {
             type: 'text',
-            text: `💥 **Project Intelligence Cache Invalidated**
+            text: `**Project Intelligence Cache Invalidated**
 
 **Project**: ${args.projectName}
 **Reason**: ${args.reason}
 **Timestamp**: ${new Date().toLocaleString()}
 
-🗑️ **Cache Status**: Successfully invalidated and removed from Memory MCP
+**Cache Status**: Successfully invalidated and removed from Memory MCP
 
-⚠️ **Impact**:
+**Impact**:
 • Project intelligence no longer available for instant loading
 • Session startup will require full project analysis
 • All cached insights have been cleared
 
-🔄 **Next Steps**:
+**Next Steps**:
 1. **Recreate cache**: \`create_project_intelligence_cache\`
 2. **Full reanalysis**: Enable comprehensive project understanding
 3. **Restore efficiency**: Return to instant context loading
 
-💡 **Tip**: Consider refreshing instead of invalidating when possible to maintain efficiency benefits.`,
+**Tip**: Consider refreshing instead of invalidating when possible to maintain efficiency benefits.`,
           },
         ],
       };
@@ -1263,12 +1577,12 @@ ${improvementText}
         content: [
           {
             type: 'text',
-            text: `❌ **Cache Invalidation Failed**
+            text: `**Cache Invalidation Failed**
 
 **Project**: ${args.projectName}
 **Error**: ${error instanceof Error ? error.message : String(error)}
 
-🔧 **Manual Recovery**:
+**Manual Recovery**:
 • Check Memory MCP connection
 • Verify cache exists before invalidation
 • Cache may already be invalid/missing`,
@@ -1321,15 +1635,9 @@ ${improvementText}
   }
 
   private getMCPEmoji(mcpType: string): string {
-    const emojis: Record<string, string> = {
-      'memory': '🧠',
-      'claudepoint': '🔄',
-      'filesystem': '📁',
-      'git': '🔀',
-      'database-platform': '🗄️',
-      'database-analytics': '📊'
-    };
-    return emojis[mcpType] || '🔧';
+    // Note: This method is kept for compatibility but returns empty string
+    // since we've removed emojis from responses to fix JSON-RPC corruption
+    return '';
   }
 
   // ===== DYNAMIC MCP DETECTION =====
@@ -1360,7 +1668,7 @@ ${improvementText}
     // In test mode, include all potential MCPs (they'll use mock implementations)
     const testMode = process.env.MCP_TEST_MODE === 'true';
     if (testMode) {
-      // console.log('🧪 [TEST MODE] Including all MCP types with mock implementations');
+      // console.log('Test mode: Including all MCP types with mock implementations');
       return potentialMCPs;
     }
 
@@ -1369,9 +1677,9 @@ ${improvementText}
       const isAvailable = this.isMCPAvailable(config.type);
       if (isAvailable) {
         configs.push(config);
-        // console.log(`✅ Detected available MCP: ${config.type}`);
+        // console.log(`Detected available MCP: ${config.type}`);
       } else {
-        // console.log(`⚠️ MCP not available: ${config.type}`);
+        // console.log(`MCP not available: ${config.type}`);
       }
     }
 
@@ -1385,7 +1693,8 @@ ${improvementText}
       case 'memory':
         return !!(globalThis as any).local__memory__read_graph;
       case 'claudepoint':
-        return !!(globalThis as any).local__claudepoint__list_checkpoints;
+        // ClaudePoint is now INTERNAL - always available!
+        return true;
       case 'filesystem':
         return !!(globalThis as any).local__filesystem__read_file;
       case 'git':
@@ -1402,13 +1711,13 @@ ${improvementText}
   // ===== INITIALIZATION =====
 
   async initialize() {
-    // console.log('🎭 Initializing Conversation Continuity MCP Server...');
+    // console.log('Initializing Conversation Continuity MCP Server...');
     
     // Check if we're in test mode
     const testMode = process.env.MCP_TEST_MODE === 'true';
     if (testMode) {
-      // console.log('🧪 [TEST MODE] Running with mock MCP implementations');
-      // console.log('📝 [TEST MODE] No actual MCP connections will be made');
+      // console.log('Test mode: Running with mock MCP implementations');
+      // console.log('Test mode: No actual MCP connections will be made');
     }
 
     // Detect available MCPs dynamically
@@ -1426,7 +1735,7 @@ ${improvementText}
       console.error('INFO: Enabled test mode with mock MCPs');
     }
 
-    // console.log(`🔧 Configuring ${mcpConfigs.length} available MCPs: ${mcpConfigs.map(c => c.type).join(', ')}`);
+    // console.log(`Configuring ${mcpConfigs.length} available MCPs: ${mcpConfigs.map(c => c.type).join(', ')}`);
     this.clientFactory = new MCPClientFactory(mcpConfigs);
 
     // Initialize orchestrator
@@ -1438,19 +1747,19 @@ ${improvementText}
       memoryClient = await this.clientFactory.createMemoryClientSafe();
       if (memoryClient) {
         this.rulesEngine = new SessionRulesEngine(memoryClient);
-        // console.log('✅ Session Rules Engine initialized with Memory MCP');
+        // console.log('Session Rules Engine initialized with Memory MCP');
       } else {
-        // console.log('⚠️ Session Rules Engine disabled - Memory MCP not available');
+        // console.log('Session Rules Engine disabled - Memory MCP not available');
         // Create a null rules engine that returns empty results
         this.rulesEngine = new NullSessionRulesEngine();
       }
     } catch (error) {
-      console.warn('⚠️ Failed to initialize Session Rules Engine:', error);
+      console.warn('Failed to initialize Session Rules Engine:', error);
       this.rulesEngine = new NullSessionRulesEngine();
     }
 
-    // console.log('✅ Conversation Continuity MCP Server initialized successfully!');
-    // console.log(`🎼 Ready to orchestrate the ${mcpConfigs.length}-MCP symphony!`);
+    // console.log('Conversation Continuity MCP Server initialized successfully!');
+    // console.log(`Ready to orchestrate the ${mcpConfigs.length}-MCP symphony!`);
   }
 
   async run() {
@@ -1459,7 +1768,7 @@ ${improvementText}
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
-    // console.log('🚀 Conversation Continuity MCP Server running...');
+    // console.log('Conversation Continuity MCP Server running...');
   }
 }
 

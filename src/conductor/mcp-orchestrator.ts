@@ -1307,7 +1307,7 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
                     for (const obs of observations) {
                         if (obs.startsWith('project_name:')) {
                             const parts = obs.split('project_name:');
-                            if (parts.length > 1) {
+                            if (parts.length > 1 && parts[1]) {
                                 return parts[1].trim();
                             }
                         }

@@ -3,13 +3,15 @@
 /**
  * Session Rules Management Engine
  * Stores and enforces persistent user preferences using Memory MCP
+ *
+ * FIXED: Resolved all TODOs with proper implementations
  */
 
-import { 
-  SessionRule, 
-  RuleEngine, 
-  RuleEnforcementResult, 
-  ProposedAction, 
+import {
+  SessionRule,
+  RuleEngine,
+  RuleEnforcementResult,
+  ProposedAction,
   RuleValidationResult,
   RuleViolation,
   RuleSuggestion,
@@ -55,7 +57,7 @@ export class SessionRulesEngine implements RuleEngine {
 
     // Store in Memory MCP
     await this.storeRuleInMemory(completeRule);
-    
+
     // Update cache
     this.ruleCache.set(completeRule.id, completeRule);
 
@@ -77,7 +79,7 @@ export class SessionRulesEngine implements RuleEngine {
 
     // Update in Memory MCP
     await this.updateRuleInMemory(updatedRule);
-    
+
     // Update cache
     this.ruleCache.set(ruleId, updatedRule);
 
@@ -88,7 +90,7 @@ export class SessionRulesEngine implements RuleEngine {
   async deleteRule(ruleId: string): Promise<void> {
     // Remove from Memory MCP
     await this.memoryClient.deleteEntities([`SessionRule_${ruleId}`]);
-    
+
     // Remove from cache
     this.ruleCache.delete(ruleId);
 
@@ -97,13 +99,13 @@ export class SessionRulesEngine implements RuleEngine {
 
   async getRules(scope?: RuleScope): Promise<SessionRule[]> {
     await this.refreshRuleCache();
-    
+
     const rules = Array.from(this.ruleCache.values());
-    
+
     if (scope) {
       return rules.filter(rule => rule.scope === scope);
     }
-    
+
     return rules.sort((a, b) => a.priority - b.priority);
   }
 
@@ -123,7 +125,7 @@ export class SessionRulesEngine implements RuleEngine {
     for (const rule of activeRules.filter(r => r.active)) {
       if (this.actionMatchesRule(action, rule)) {
         console.log(`Rule ${rule.id} applies to action ${action.type}`);
-        
+
         const result = await this.enforceIndividualRule(rule, action);
         results.push(result);
 
@@ -146,14 +148,14 @@ export class SessionRulesEngine implements RuleEngine {
 
   async validateAction(action: ProposedAction): Promise<RuleValidationResult> {
     const enforcement = await this.enforceRules(action);
-    
+
     const blocked = enforcement.some(e => e.result === 'blocked');
     const warned = enforcement.some(e => e.result === 'warned');
-    
+
     return {
       valid: !blocked,
-      conflicts: [], // TODO: Implement conflict detection
-      suggestions: [], // TODO: Implement optimization suggestions
+      conflicts: await this.detectRuleConflicts(enforcement),
+      suggestions: await this.generateOptimizationSuggestions(enforcement, action),
       estimatedEffectiveness: this.calculateActionEffectiveness(enforcement)
     };
   }
@@ -165,7 +167,7 @@ export class SessionRulesEngine implements RuleEngine {
 
     for (const ruleData of LUTHER_SESSION_RULES) {
       const existingRule = await this.findRuleByText(ruleData.rule!);
-      
+
       if (!existingRule) {
         await this.createRule({
           ...ruleData,
@@ -244,8 +246,8 @@ export class SessionRulesEngine implements RuleEngine {
     const optimizations: RuleOptimization[] = [];
 
     // Find ineffective rules (low effectiveness score)
-    const ineffectiveRules = rules.filter(r => 
-      r.effectiveness !== undefined && r.effectiveness < 0.3 && r.usageCount > 5
+    const ineffectiveRules = rules.filter(r =>
+        r.effectiveness !== undefined && r.effectiveness < 0.3 && r.usageCount > 5
     );
 
     for (const rule of ineffectiveRules) {
@@ -275,7 +277,7 @@ export class SessionRulesEngine implements RuleEngine {
 
   async syncRulesToMemory(): Promise<void> {
     const rules = Array.from(this.ruleCache.values());
-    
+
     for (const rule of rules) {
       await this.storeRuleInMemory(rule);
     }
@@ -328,7 +330,10 @@ export class SessionRulesEngine implements RuleEngine {
         rule.scope,
         (rule.triggers || []).join(','),
         `usage:${rule.usageCount},violations:${rule.violationCount}`,
-        `effectiveness:${rule.effectiveness || 'unknown'}`
+        `effectiveness:${rule.effectiveness || 'unknown'}`,
+        `created:${rule.createdAt.toISOString()}`,
+        `updated:${rule.updatedAt.toISOString()}`,
+        `conditions:${JSON.stringify(rule.conditions || [])}`
       ]
     };
 
@@ -361,9 +366,25 @@ export class SessionRulesEngine implements RuleEngine {
 
     // Parse effectiveness
     const effectivenessMatch = obs[8].match(/effectiveness:(.+)/);
-    const effectiveness = effectivenessMatch && effectivenessMatch[1] !== 'unknown' 
-      ? parseFloat(effectivenessMatch[1]) 
-      : undefined;
+    const effectiveness = effectivenessMatch && effectivenessMatch[1] !== 'unknown'
+        ? parseFloat(effectivenessMatch[1])
+        : undefined;
+
+    // Parse timestamps from metadata
+    const createdAtStr = obs[9]?.replace('created:', '') || new Date().toISOString();
+    const updatedAtStr = obs[10]?.replace('updated:', '') || new Date().toISOString();
+    const createdAt = new Date(createdAtStr);
+    const updatedAt = new Date(updatedAtStr);
+
+    // Parse conditions from observations
+    const conditionsStr = obs[11]?.replace('conditions:', '') || '[]';
+    let conditions = [];
+    try {
+      conditions = JSON.parse(conditionsStr);
+    } catch (error) {
+      console.warn('Failed to parse rule conditions:', error);
+      conditions = [];
+    }
 
     return {
       id: entity.name.replace('SessionRule_', ''),
@@ -374,9 +395,9 @@ export class SessionRulesEngine implements RuleEngine {
       active: obs[4] === 'true',
       scope: obs[5] as RuleScope,
       triggers: obs[6] ? obs[6].split(',') : [],
-      conditions: [], // TODO: Parse conditions from observations
-      createdAt: new Date(), // TODO: Parse from metadata
-      updatedAt: new Date(), // TODO: Parse from metadata
+      conditions,
+      createdAt,
+      updatedAt,
       usageCount,
       violationCount,
       ...(effectiveness !== undefined && { effectiveness })
@@ -386,9 +407,9 @@ export class SessionRulesEngine implements RuleEngine {
   private actionMatchesRule(action: ProposedAction, rule: SessionRule): boolean {
     // Check if action type matches any rule triggers
     if (rule.triggers && rule.triggers.length > 0) {
-      return rule.triggers.some(trigger => 
-        action.type.toLowerCase().includes(trigger.toLowerCase()) ||
-        action.description.toLowerCase().includes(trigger.toLowerCase())
+      return rule.triggers.some(trigger =>
+          action.type.toLowerCase().includes(trigger.toLowerCase()) ||
+          action.description.toLowerCase().includes(trigger.toLowerCase())
       );
     }
 
@@ -474,17 +495,17 @@ export class SessionRulesEngine implements RuleEngine {
 
   private calculateActionEffectiveness(enforcement: RuleEnforcementResult[]): number {
     if (enforcement.length === 0) return 1.0;
-    
+
     const blocked = enforcement.filter(e => e.result === 'blocked').length;
     const warned = enforcement.filter(e => e.result === 'warned').length;
-    
+
     // Simple effectiveness calculation
     return Math.max(0, 1 - (blocked * 0.5) - (warned * 0.2));
   }
 
   private calculateRuleEffectiveness(rule: SessionRule, userResponse: string): number {
     const currentEffectiveness = rule.effectiveness || 0.5;
-    
+
     // Adjust effectiveness based on user response
     switch (userResponse) {
       case 'complied':
@@ -531,7 +552,7 @@ export class SessionRulesEngine implements RuleEngine {
 
   private findRedundantRules(rules: SessionRule[]): [SessionRule, SessionRule][] {
     const redundantPairs: [SessionRule, SessionRule][] = [];
-    
+
     for (let i = 0; i < rules.length; i++) {
       for (let j = i + 1; j < rules.length; j++) {
         const rule1 = rules[i];
@@ -544,7 +565,7 @@ export class SessionRulesEngine implements RuleEngine {
         }
       }
     }
-    
+
     return redundantPairs;
   }
 
@@ -552,7 +573,7 @@ export class SessionRulesEngine implements RuleEngine {
     // Simple similarity calculation based on text overlap and shared triggers
     const textSimilarity = this.calculateTextSimilarity(rule1.rule, rule2.rule);
     const triggerOverlap = this.calculateTriggerOverlap(rule1.triggers || [], rule2.triggers || []);
-    
+
     return (textSimilarity + triggerOverlap) / 2;
   }
 
@@ -560,15 +581,98 @@ export class SessionRulesEngine implements RuleEngine {
     const words1 = text1.toLowerCase().split(' ');
     const words2 = text2.toLowerCase().split(' ');
     const commonWords = words1.filter(word => words2.includes(word));
-    
+
     return commonWords.length / Math.max(words1.length, words2.length);
   }
 
   private calculateTriggerOverlap(triggers1: string[], triggers2: string[]): number {
     if (triggers1.length === 0 && triggers2.length === 0) return 1;
     if (triggers1.length === 0 || triggers2.length === 0) return 0;
-    
+
     const commonTriggers = triggers1.filter(trigger => triggers2.includes(trigger));
     return commonTriggers.length / Math.max(triggers1.length, triggers2.length);
+  }
+
+  // ===== CONFLICT DETECTION IMPLEMENTATION =====
+
+  /**
+   * Detect conflicts between rule enforcement results
+   */
+  private async detectRuleConflicts(enforcement: RuleEnforcementResult[]): Promise<string[]> {
+    const conflicts: string[] = [];
+
+    // Check for enforcement level conflicts
+    const hasBlocked = enforcement.some(e => e.result === 'blocked');
+    const hasAllowed = enforcement.some(e => e.result === 'allowed');
+    const hasWarned = enforcement.some(e => e.result === 'warned');
+
+    if (hasBlocked && hasAllowed) {
+      conflicts.push('Conflicting enforcement: Some rules block while others allow the same action');
+    }
+
+    if (hasWarned && hasBlocked) {
+      conflicts.push('Enforcement conflict: Action both warned and blocked by different rules');
+    }
+
+    // Check for priority conflicts
+    const priorities = enforcement.map(e => e.ruleId).map(async ruleId => {
+      const rule = await this.getRule(ruleId);
+      return rule?.priority || 100;
+    });
+
+    const resolvedPriorities = await Promise.all(priorities);
+    const uniquePriorities = new Set(resolvedPriorities);
+
+    if (enforcement.length > 1 && uniquePriorities.size === resolvedPriorities.length) {
+      conflicts.push('Multiple rules with different priorities affecting the same action');
+    }
+
+    return conflicts;
+  }
+
+  // ===== OPTIMIZATION SUGGESTIONS IMPLEMENTATION =====
+  
+
+  /**
+   * Generate optimization suggestions based on enforcement results
+   */
+  private async generateOptimizationSuggestions(
+      enforcement: RuleEnforcementResult[],
+      action: ProposedAction
+  ): Promise<string[]> {
+    const suggestions: string[] = [];
+
+    // If multiple rules triggered, suggest consolidation
+    if (enforcement.length > 2) {
+      suggestions.push(`Consider consolidating ${enforcement.length} triggered rules for simpler enforcement`);
+    }
+
+    // If action was blocked, suggest alternative approaches
+    const blocked = enforcement.filter(e => e.result === 'blocked');
+    if (blocked.length > 0) {
+      suggestions.push('Consider breaking down the action into smaller, compliant steps');
+      suggestions.push('Review rule enforcement levels - some rules may be too strict');
+    }
+
+    // If action was warned but not blocked, suggest rule refinement
+    const warned = enforcement.filter(e => e.result === 'warned');
+    if (warned.length > 0 && blocked.length === 0) {
+      suggestions.push('Consider promoting warning rules to soft blocks for better compliance');
+    }
+
+    // If no rules triggered, suggest creating new rules
+    if (enforcement.length === 0 && action.riskLevel === 'high') {
+      suggestions.push('Consider creating rules for high-risk actions to ensure oversight');
+    }
+
+    // Check for rule effectiveness and suggest improvements
+    for (const result of enforcement) {
+      const rule = await this.getRule(result.ruleId);
+      if (rule && rule.effectiveness !== undefined && rule.effectiveness < 0.5) {
+        suggestions.push(`Rule "${rule.rule}" has low effectiveness - consider updating its enforcement strategy`);
+      }
+    }
+
+    return suggestions;
   }
 }

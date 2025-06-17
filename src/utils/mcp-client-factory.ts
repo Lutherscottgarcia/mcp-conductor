@@ -78,8 +78,8 @@ class RealCheckpointManager {
     // Create tarball of RiderProjects (excluding large dirs)
     const tarCommand = `cd "${SOURCE_DIR}/.." && tar ${excludeArgs} ${additionalExclusions} -czf "${tarPath}" RiderProjects`;
     
-    console.log(`Creating checkpoint tarball: ${checkpointId}`);
-    console.log(`Tar command: ${tarCommand}`);
+    // console.log(`Creating checkpoint tarball: ${checkpointId}`);
+    // console.log(`Tar command: ${tarCommand}`);
     await execAsync(tarCommand);
     
     // Get file stats
@@ -152,7 +152,7 @@ class RealCheckpointManager {
     
     // Create backup before restore
     const backupId = `emergency_backup_${Date.now()}`;
-    console.log(`Creating emergency backup: ${backupId}`);
+    // console.log(`Creating emergency backup: ${backupId}`);
     const backupResult = await this.createTarball(backupId);
     const backupMetadata: CheckpointMetadata = {
       id: backupId,
@@ -166,7 +166,7 @@ class RealCheckpointManager {
     
     // Extract checkpoint
     const extractCommand = `cd "${targetDir}/.." && tar -xzf "${tarPath}"`;
-    console.log(`Restoring checkpoint: ${checkpointId}`);
+    // console.log(`Restoring checkpoint: ${checkpointId}`);
     await execAsync(extractCommand);
     
     const metadata = await this.loadMetadata(checkpointId);
@@ -209,7 +209,7 @@ const isTestMode = () => {
   
   // Log the detection result for debugging
   if (!hasMemoryMCP) {
-    console.warn('⚠️  Memory MCP global functions not detected - enabling test mode');
+    // console.warn('⚠️  Memory MCP global functions not detected - enabling test mode');
   }
   
   return !hasMemoryMCP;
@@ -224,10 +224,9 @@ const shouldLog = (level: 'debug' | 'info' | 'warn' | 'error' = 'info') => {
 };
 
 const mcpLog = (level: 'debug' | 'info' | 'warn' | 'error', message: string) => {
-  if (shouldLog(level)) {
-    const prefix = isTestMode() ? '[TEST MODE]' : '[PROD MODE]';
-    console[level](`${prefix} ${message}`);
-  }
+  // DISABLED: Console output causes JSON-RPC corruption
+  // All logging disabled to prevent protocol contamination
+  return;
 };
 import type { MCPClientConfig } from '@/types/orchestration-types.js';
 import type {
@@ -423,7 +422,7 @@ export class MCPClientFactory {
     try {
       return await this.createClaudepointClient();
     } catch (error) {
-      console.warn('Claudepoint MCP failed to initialize:', error);
+      // console.warn('Claudepoint MCP failed to initialize:', error);
       return null;
     }
   }
@@ -436,7 +435,7 @@ export class MCPClientFactory {
     try {
       return await this.createFilesystemClient();
     } catch (error) {
-      console.warn('Filesystem MCP failed to initialize:', error);
+      // console.warn('Filesystem MCP failed to initialize:', error);
       return null;
     }
   }
@@ -449,7 +448,7 @@ export class MCPClientFactory {
     try {
       return await this.createGitClient();
     } catch (error) {
-      console.warn('Git MCP failed to initialize:', error);
+      // console.warn('Git MCP failed to initialize:', error);
       return null;
     }
   }
@@ -464,7 +463,7 @@ export class MCPClientFactory {
     try {
       return await this.createDatabaseClient(database);
     } catch (error) {
-      console.warn(`Database MCP (${database}) failed to initialize:`, error);
+      // console.warn(`Database MCP (${database}) failed to initialize:`, error);
       return null;
     }
   }
@@ -524,7 +523,7 @@ export class MCPClientFactory {
     databasePlatform: DatabaseMCPClient;
     databaseAnalytics: DatabaseMCPClient;
   }> {
-    console.warn('WARNING: getAllClients() is deprecated - use getAllAvailableClients() for graceful handling');
+    // console.warn('WARNING: getAllClients() is deprecated - use getAllAvailableClients() for graceful handling');
     
     const [memory, claudepoint, filesystem, git, databasePlatform, databaseAnalytics] = 
       await Promise.all([
@@ -768,7 +767,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
   constructor(private workingDirectory?: string) {}
 
   async createCheckpoint(options: CheckpointOptions): Promise<Checkpoint> {
-    console.log(`Creating REAL checkpoint: ${options.description}`);
+    // console.log(`Creating REAL checkpoint: ${options.description}`);
     
     // Ensure directory structure exists
     await RealCheckpointManager.ensureDirectoryStructure();
@@ -797,7 +796,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       // Save metadata
       await RealCheckpointManager.saveMetadata(checkpointId, metadata);
       
-      console.log(`Real checkpoint created: ${checkpointId} (${RealCheckpointManager.formatSize(size)}, ${fileCount} files)`);
+      // console.log(`Real checkpoint created: ${checkpointId} (${RealCheckpointManager.formatSize(size)}, ${fileCount} files)`);
       
       return {
         id: checkpointId,
@@ -807,13 +806,13 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         fileCount: metadata.fileCount
       };
     } catch (error) {
-      console.error(`Failed to create checkpoint: ${error}`);
+      // console.error(`Failed to create checkpoint: ${error}`);
       throw new Error(`Failed to create checkpoint: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   async listCheckpoints(): Promise<Checkpoint[]> {
-    console.log(`Listing REAL checkpoints`);
+    // console.log(`Listing REAL checkpoints`);
     
     try {
       const checkpointIds = await RealCheckpointManager.listCheckpointDirectories();
@@ -832,16 +831,16 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         }
       }
       
-      console.log(`Found ${checkpoints.length} real checkpoints`);
+      // console.log(`Found ${checkpoints.length} real checkpoints`);
       return checkpoints;
     } catch (error) {
-      console.error(`Failed to list checkpoints: ${error}`);
+      // console.error(`Failed to list checkpoints: ${error}`);
       return [];
     }
   }
 
   async restoreCheckpoint(checkpoint: string, dryRun?: boolean): Promise<RestoreResult> {
-    console.log(`${dryRun ? 'Dry run' : 'Restoring'} REAL checkpoint: ${checkpoint}`);
+    // console.log(`${dryRun ? 'Dry run' : 'Restoring'} REAL checkpoint: ${checkpoint}`);
     
     try {
       // Find checkpoint by partial name match
@@ -865,10 +864,10 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         dryRun || false
       );
       
-      console.log(`${result.success ? 'SUCCESS' : 'FAILED'} Checkpoint restore result: ${result.message}`);
+      // console.log(`${result.success ? 'SUCCESS' : 'FAILED'} Checkpoint restore result: ${result.message}`);
       return result;
     } catch (error) {
-      console.error(`Failed to restore checkpoint: ${error}`);
+      // console.error(`Failed to restore checkpoint: ${error}`);
       return {
         success: false,
         message: `Failed to restore checkpoint: ${error instanceof Error ? error.message : String(error)}`,
@@ -878,7 +877,7 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
   }
 
   async setupClaudepoint(): Promise<void> {
-    console.log(`Setting up REAL ClaudePoint`);
+    // console.log(`Setting up REAL ClaudePoint`);
     
     try {
       // Ensure directory structure exists
@@ -898,18 +897,18 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
         };
         
         await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2));
-        console.log(`Created ClaudePoint config: ${configPath}`);
+        // console.log(`Created ClaudePoint config: ${configPath}`);
       }
       
-      console.log(`Real ClaudePoint setup complete in: ${CHECKPOINT_DIR}`);
+      // console.log(`Real ClaudePoint setup complete in: ${CHECKPOINT_DIR}`);
     } catch (error) {
-      console.error(`Failed to setup ClaudePoint: ${error}`);
+      // console.error(`Failed to setup ClaudePoint: ${error}`);
       throw error;
     }
   }
 
   async getChangelog(): Promise<ChangelogEntry[]> {
-    console.log(`Getting REAL changelog`);
+    // console.log(`Getting REAL changelog`);
     
     try {
       const changelogPath = path.join(CHECKPOINT_DIR, 'changelog.json');
@@ -928,13 +927,13 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       
       return Array.isArray(changelog) ? changelog : [];
     } catch (error) {
-      console.error(`Failed to get changelog: ${error}`);
+      // console.error(`Failed to get changelog: ${error}`);
       return [];
     }
   }
 
   async setChangelog(entry: ChangelogEntry): Promise<void> {
-    console.log(`Adding REAL changelog entry: ${entry.description}`);
+    // console.log(`Adding REAL changelog entry: ${entry.description}`);
     
     try {
       const changelogPath = path.join(CHECKPOINT_DIR, 'changelog.json');
@@ -964,9 +963,9 @@ class ClaudepointClientAdapter implements ClaudepointMCPClient {
       // Save updated changelog
       await fs.promises.writeFile(changelogPath, JSON.stringify(changelog, null, 2));
       
-      console.log(`Changelog entry added: ${entry.action_type}`);
+      // console.log(`Changelog entry added: ${entry.action_type}`);
     } catch (error) {
-      console.error(`Failed to set changelog: ${error}`);
+      // console.error(`Failed to set changelog: ${error}`);
       throw error;
     }
   }
@@ -1113,7 +1112,7 @@ class GitClientAdapter implements GitMCPClient {
       };
     }
     // Git MCP integration will be implemented when Git MCP SDK is available
-    console.warn('Git MCP integration pending - using mock data');
+    // console.warn('Git MCP integration pending - using mock data');
     return {
       branch: 'main',
       ahead: 0,
@@ -1130,7 +1129,7 @@ class GitClientAdapter implements GitMCPClient {
       // console.log(`[TEST MODE] Adding ${files.length} files to git`);
       return;
     }
-    console.warn('Git MCP integration pending - add operation simulated');
+    // console.warn('Git MCP integration pending - add operation simulated');
   }
 
   async commit(message: string): Promise<string> {
@@ -1138,7 +1137,7 @@ class GitClientAdapter implements GitMCPClient {
       // console.log(`[TEST MODE] Committing with message: ${message}`);
       return `test_commit_${Date.now()}`;
     }
-    console.warn('Git MCP integration pending - commit operation simulated');
+    // console.warn('Git MCP integration pending - commit operation simulated');
     return `mock_commit_${Date.now()}`;
   }
 
@@ -1147,7 +1146,7 @@ class GitClientAdapter implements GitMCPClient {
       // console.log(`[TEST MODE] Pushing to ${remote || 'origin'}/${branch || 'main'}`);
       return;
     }
-    console.warn('Git MCP integration pending - push operation simulated');
+    // console.warn('Git MCP integration pending - push operation simulated');
   }
 
   async pull(remote?: string, branch?: string): Promise<void> {
@@ -1155,7 +1154,7 @@ class GitClientAdapter implements GitMCPClient {
       // console.log(`[TEST MODE] Pulling from ${remote || 'origin'}/${branch || 'main'}`);
       return;
     }
-    console.warn('Git MCP integration pending - pull operation simulated');
+    // console.warn('Git MCP integration pending - pull operation simulated');
   }
 
   async log(options?: GitLogOptions): Promise<GitCommit[]> {
@@ -1170,7 +1169,7 @@ class GitClientAdapter implements GitMCPClient {
         }
       ];
     }
-    console.warn('Git MCP integration pending - using mock commit history');
+    // console.warn('Git MCP integration pending - using mock commit history');
     return [];
   }
 
@@ -1179,7 +1178,7 @@ class GitClientAdapter implements GitMCPClient {
       // console.log(`[TEST MODE] Getting git diff`);
       return 'diff --git a/src/index.ts b/src/index.ts\n+// Mock diff content';
     }
-    console.warn('Git MCP integration pending - using mock diff');
+    // console.warn('Git MCP integration pending - using mock diff');
     return '';
   }
 
@@ -1191,7 +1190,7 @@ class GitClientAdapter implements GitMCPClient {
         { name: 'develop', current: false, remote: 'origin/develop' }
       ];
     }
-    console.warn('Git MCP integration pending - using mock branch data');
+    // console.warn('Git MCP integration pending - using mock branch data');
     return [{ name: 'main', current: true }];
   }
 
@@ -1200,7 +1199,7 @@ class GitClientAdapter implements GitMCPClient {
       // console.log(`[TEST MODE] Checking out branch: ${branch}`);
       return;
     }
-    console.warn('Git MCP integration pending - checkout operation simulated');
+    // console.warn('Git MCP integration pending - checkout operation simulated');
   }
 }
 
@@ -1254,7 +1253,7 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
         views: []
       };
     }
-    console.warn('Database schema introspection pending - using mock schema');
+    // console.warn('Database schema introspection pending - using mock schema');
     return { tables: [], views: [] };
   }
 
@@ -1274,7 +1273,7 @@ class DatabaseClientAdapter implements DatabaseMCPClient {
         }
       };
     }
-    console.warn('Database transactions pending - using mock transaction');
+    // console.warn('Database transactions pending - using mock transaction');
     return {
       query: async () => ({ rows: [], rowCount: 0 }),
       commit: async () => {},

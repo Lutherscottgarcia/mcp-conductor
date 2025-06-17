@@ -1306,7 +1306,10 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
                     const observations = entity.observations || [];
                     for (const obs of observations) {
                         if (obs.startsWith('project_name:')) {
-                            return obs.split('project_name:')[1].trim();
+                            const parts = obs.split('project_name:');
+                            if (parts.length > 1) {
+                                return parts[1].trim();
+                            }
                         }
                     }
                 }
@@ -1318,10 +1321,12 @@ export class ConversationContinuityOrchestrator implements MCPOrchestrator {
                 if (allowedDirs.length > 0) {
                     // Extract project name from the last directory in the path
                     const projectPath = allowedDirs[0];
-                    const pathParts = projectPath.split('/');
-                    const projectName = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
-                    if (projectName && projectName !== '') {
-                        return projectName;
+                    if (projectPath) {
+                        const pathParts = projectPath.split('/');
+                        const projectName = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
+                        if (projectName && projectName !== '') {
+                            return projectName;
+                        }
                     }
                 }
             }

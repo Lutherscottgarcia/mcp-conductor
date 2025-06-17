@@ -3,6 +3,8 @@
 /**
  * Conversation Continuity MCP Server - Main Entry Point
  * The world's first MCP orchestrator for seamless AI development sessions
+ * 
+ * CLEANED: Removed all emojis and optimized console logging for JSON-RPC compatibility
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -26,7 +28,6 @@ import type { ProjectIntelligence, ProjectChange } from '@/types/project-intelli
 // ===== NULL RULES ENGINE FOR MISSING MEMORY MCP =====
 class NullSessionRulesEngine {
   async createRule(ruleData: any): Promise<SessionRule> {
-    // console.log('⚠️ Session rule creation disabled - Memory MCP not available');
     return {
       id: `disabled_rule_${Date.now()}`,
       rule: ruleData.rule || 'Rule creation disabled',
@@ -43,21 +44,18 @@ class NullSessionRulesEngine {
   }
 
   async getRules(scope?: string): Promise<SessionRule[]> {
-    // console.log('⚠️ Session rules disabled - Memory MCP not available');
     return [];
   }
 
   async enforceRules(action: ProposedAction): Promise<any[]> {
-    // console.log('⚠️ Rule enforcement disabled - Memory MCP not available');
     return [];
   }
 
   async initializeLutherRules(): Promise<void> {
-    // console.log('⚠️ Luther\'s rules initialization disabled - Memory MCP not available');
+    // Rules initialization disabled - Memory MCP not available
   }
 
   async optimizeRules(): Promise<any[]> {
-    // console.log('⚠️ Rule optimization disabled - Memory MCP not available');
     return [];
   }
 }
@@ -532,7 +530,6 @@ class ConversationContinuityServer {
             throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
-        // Error handling tool - details included in response
         return {
           content: [
             {
@@ -1038,8 +1035,6 @@ This checkpoint coordinates state across multiple MCPs and can be used for unifi
   }
 
   private async handleMonitorConversation() {
-    // This would integrate with Claude's token counting system
-    // For now, return placeholder data
     return {
       content: [
         {
@@ -1058,7 +1053,6 @@ Note: Full token monitoring requires integration with Claude's conversation stat
   }
 
   private async handleCompressContext(args: any) {
-    // Placeholder for context compression implementation
     return {
       content: [
         {
@@ -1082,7 +1076,6 @@ Note: Full implementation pending conversation access integration.`,
   }
 
   private async handleSuggestRules(args: any) {
-    // Placeholder - would analyze patterns from database
     return {
       content: [
         {
@@ -1179,8 +1172,6 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
 
   private async handleCreateProjectIntelligenceCache(args: any) {
     try {
-      // console.log('Creating Project Intelligence Cache...');
-      
       const projectName = args.projectName || 'MCPConductor';
       const options = args.options || {
         includeFileContents: false,
@@ -1191,10 +1182,8 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         compressionLevel: 'standard'
       };
 
-      // Create the intelligence cache using the orchestrator
       const intelligence = await this.orchestrator.createProjectIntelligenceCache(projectName, options);
       
-      // Log the creation event
       await this.logIntelligenceEvent({
         eventId: `cache_created_${Date.now()}`,
         timestamp: new Date(),
@@ -1237,7 +1226,6 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         ],
       };
     } catch (error) {
-      // Failed to create Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1259,8 +1247,6 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
 
   private async handleLoadProjectIntelligenceCache(args: any) {
     try {
-      // console.log(`Loading Project Intelligence Cache for: ${args.projectName}`);
-      
       const intelligence = await this.orchestrator.loadProjectIntelligenceCache(args.projectName);
       
       if (!intelligence) {
@@ -1283,10 +1269,8 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         };
       }
 
-      // Validate freshness before loading
       const validation = await this.orchestrator.validateProjectIntelligenceCache(args.projectName);
       
-      // Log the load event
       await this.logIntelligenceEvent({
         eventId: `cache_loaded_${Date.now()}`,
         timestamp: new Date(),
@@ -1341,7 +1325,6 @@ ${recommendationText}`,
         ],
       };
     } catch (error) {
-      // Failed to load Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1363,11 +1346,8 @@ ${recommendationText}`,
 
   private async handleValidateProjectIntelligenceCache(args: any) {
     try {
-      // console.log(`Validating Project Intelligence Cache for: ${args.projectName}`);
-      
       const validation = await this.orchestrator.validateProjectIntelligenceCache(args.projectName);
       
-      // Log validation event
       await this.logIntelligenceEvent({
         eventId: `cache_validated_${Date.now()}`,
         timestamp: new Date(),
@@ -1429,7 +1409,6 @@ ${validation.recommended_action === 'use'
         ],
       };
     } catch (error) {
-      // Failed to validate Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1451,12 +1430,9 @@ ${validation.recommended_action === 'use'
 
   private async handleRefreshProjectIntelligence(args: any) {
     try {
-      // console.log(`Refreshing Project Intelligence for: ${args.projectName}`);
-      
       const changes = args.changes || [];
       const updateResult = await this.orchestrator.refreshProjectIntelligence(args.projectName, changes);
       
-      // Log refresh event
       await this.logIntelligenceEvent({
         eventId: `cache_refreshed_${Date.now()}`,
         timestamp: new Date(),
@@ -1508,7 +1484,6 @@ ${improvementText}
         ],
       };
     } catch (error) {
-      // Failed to refresh Project Intelligence - error handled in response
       return {
         content: [
           {
@@ -1530,11 +1505,8 @@ ${improvementText}
 
   private async handleInvalidateProjectCache(args: any) {
     try {
-      // console.log(`Invalidating Project Intelligence Cache for: ${args.projectName}`);
-      
       await this.orchestrator.invalidateProjectCache(args.projectName, args.reason);
       
-      // Log invalidation event
       await this.logIntelligenceEvent({
         eventId: `cache_invalidated_${Date.now()}`,
         timestamp: new Date(),
@@ -1572,7 +1544,6 @@ ${improvementText}
         ],
       };
     } catch (error) {
-      // Failed to invalidate Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1598,7 +1569,6 @@ ${improvementText}
     try {
       const clients = await this.clientFactory.getAllClients();
       
-      // Store in Memory MCP for pattern analysis
       await clients.memory.createEntities([{
         name: `IntelligenceEvent_${event.eventId}`,
         entityType: 'intelligence_event',
@@ -1612,7 +1582,6 @@ ${improvementText}
         ]
       }]);
 
-      // Log to database for analytics
       await clients.databasePlatform.query(`
         INSERT INTO project_intelligence_log (
           event_id, session_id, project_name, event_type,
@@ -1628,9 +1597,7 @@ ${improvementText}
         event.timestamp
       ]);
     } catch (error) {
-      // Failed to log intelligence event - non-critical, continuing
-      // Don't throw - logging failure shouldn't break the main operation
-      // In test mode, database logging may not work
+      // Logging failure is non-critical - continue operation
     }
   }
 
@@ -1645,19 +1612,16 @@ ${improvementText}
   private detectAvailableMCPs(): MCPClientConfig[] {
     const configs: MCPClientConfig[] = [];
     
-    // Always try these core MCPs that are likely to be available
     const potentialMCPs: MCPClientConfig[] = [
       { type: 'memory' },
       { type: 'claudepoint', workingDirectory: process.env.MCP_CONDUCTOR_PROJECT_DIR || '/Users/Luther/RiderProjects' },
       { type: 'filesystem' },
     ];
 
-    // Only add Git if explicitly requested or detected
     if (process.env.MCP_INCLUDE_GIT === 'true' || (globalThis as any).local__git__status) {
       potentialMCPs.push({ type: 'git', workingDirectory: process.env.MCP_CONDUCTOR_PROJECT_DIR || '/Users/Luther/RiderProjects' });
     }
 
-    // Only add Database if explicitly requested or detected
     if (process.env.MCP_INCLUDE_DATABASE === 'true' || (globalThis as any).local__postgres_platform__query) {
       potentialMCPs.push({ type: 'database-platform', connectionString: process.env.MCP_DATABASE_PLATFORM_URL || 'postgresql://localhost/fantasygm_platform' });
     }
@@ -1665,21 +1629,15 @@ ${improvementText}
       potentialMCPs.push({ type: 'database-analytics', connectionString: process.env.MCP_DATABASE_ANALYTICS_URL || 'postgresql://localhost/nfl_analytics' });
     }
 
-    // In test mode, include all potential MCPs (they'll use mock implementations)
     const testMode = process.env.MCP_TEST_MODE === 'true';
     if (testMode) {
-      // console.log('Test mode: Including all MCP types with mock implementations');
       return potentialMCPs;
     }
 
-    // In production mode, only include MCPs that are actually detected
     for (const config of potentialMCPs) {
       const isAvailable = this.isMCPAvailable(config.type);
       if (isAvailable) {
         configs.push(config);
-        // console.log(`Detected available MCP: ${config.type}`);
-      } else {
-        // console.log(`MCP not available: ${config.type}`);
       }
     }
 
@@ -1687,14 +1645,11 @@ ${improvementText}
   }
 
   private isMCPAvailable(mcpType: MCPType): boolean {
-    // Check if the MCP's global functions are available
-    // This indicates Claude Desktop has loaded that MCP
     switch (mcpType) {
       case 'memory':
         return !!(globalThis as any).local__memory__read_graph;
       case 'claudepoint':
-        // ClaudePoint is now INTERNAL - always available!
-        return true;
+        return true; // ClaudePoint is internal - always available
       case 'filesystem':
         return !!(globalThis as any).local__filesystem__read_file;
       case 'git':
@@ -1711,55 +1666,37 @@ ${improvementText}
   // ===== INITIALIZATION =====
 
   async initialize() {
-    // console.log('Initializing Conversation Continuity MCP Server...');
-    
-    // Check if we're in test mode
     const testMode = process.env.MCP_TEST_MODE === 'true';
     if (testMode) {
-      // console.log('Test mode: Running with mock MCP implementations');
-      // console.log('Test mode: No actual MCP connections will be made');
+      console.warn('Test mode: Running with mock MCP implementations');
     }
 
-    // Detect available MCPs dynamically
     const mcpConfigs = this.detectAvailableMCPs();
     
     if (mcpConfigs.length === 0) {
-      // WARNING: No MCPs detected! Running in standalone mode with mock implementations.
-      // Instead of throwing an error, use test mode
+      console.warn('WARNING: No MCPs detected! Running in standalone mode with mock implementations.');
       process.env.MCP_TEST_MODE = 'true';
-      // Add minimal MCP configs for test mode
       mcpConfigs.push(
         { type: 'memory' },
         { type: 'filesystem' }
       );
-      // INFO: Enabled test mode with mock MCPs
     }
 
-    // console.log(`Configuring ${mcpConfigs.length} available MCPs: ${mcpConfigs.map(c => c.type).join(', ')}`);
     this.clientFactory = new MCPClientFactory(mcpConfigs);
-
-    // Initialize orchestrator
     this.orchestrator = new ConversationContinuityOrchestrator(this.clientFactory);
 
-    // Initialize rules engine with Memory MCP client (if available)
     let memoryClient = null;
     try {
       memoryClient = await this.clientFactory.createMemoryClientSafe();
       if (memoryClient) {
         this.rulesEngine = new SessionRulesEngine(memoryClient);
-        // console.log('Session Rules Engine initialized with Memory MCP');
       } else {
-        // console.log('Session Rules Engine disabled - Memory MCP not available');
-        // Create a null rules engine that returns empty results
         this.rulesEngine = new NullSessionRulesEngine();
       }
     } catch (error) {
-      // Failed to initialize Session Rules Engine - using null engine
+      console.warn('Failed to initialize Session Rules Engine - using null engine');
       this.rulesEngine = new NullSessionRulesEngine();
     }
-
-    // console.log('Conversation Continuity MCP Server initialized successfully!');
-    // console.log(`Ready to orchestrate the ${mcpConfigs.length}-MCP symphony!`);
   }
 
   async run() {
@@ -1767,14 +1704,12 @@ ${improvementText}
 
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-
-    // console.log('Conversation Continuity MCP Server running...');
   }
 }
 
 // Start the server
 const server = new ConversationContinuityServer();
 server.run().catch(error => {
-  // Server startup error - MCP server failed to start
+  console.error('Server startup error:', error);
   process.exit(1);
 });

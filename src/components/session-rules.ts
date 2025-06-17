@@ -17,6 +17,7 @@ import {
   RuleSuggestion,
   UserBehaviorPattern,
   RuleOptimization,
+  RuleConflict,
   LUTHER_SESSION_RULES,
   SessionRuleEntity,
   RuleEnforcementEntity,

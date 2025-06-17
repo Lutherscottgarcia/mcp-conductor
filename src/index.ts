@@ -532,7 +532,7 @@ class ConversationContinuityServer {
             throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
-        console.error(`Error handling tool ${name}:`, error);
+        // Error handling tool - details included in response
         return {
           content: [
             {
@@ -1237,7 +1237,7 @@ ${Array.from(allStatuses.values()).every(s => s.status === 'online')
         ],
       };
     } catch (error) {
-      console.error('Failed to create Project Intelligence Cache:', error);
+      // Failed to create Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1341,7 +1341,7 @@ ${recommendationText}`,
         ],
       };
     } catch (error) {
-      console.error('Failed to load Project Intelligence Cache:', error);
+      // Failed to load Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1429,7 +1429,7 @@ ${validation.recommended_action === 'use'
         ],
       };
     } catch (error) {
-      console.error('Failed to validate Project Intelligence Cache:', error);
+      // Failed to validate Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1508,7 +1508,7 @@ ${improvementText}
         ],
       };
     } catch (error) {
-      console.error('Failed to refresh Project Intelligence:', error);
+      // Failed to refresh Project Intelligence - error handled in response
       return {
         content: [
           {
@@ -1572,7 +1572,7 @@ ${improvementText}
         ],
       };
     } catch (error) {
-      console.error('Failed to invalidate Project Intelligence Cache:', error);
+      // Failed to invalidate Project Intelligence Cache - error handled in response
       return {
         content: [
           {
@@ -1628,7 +1628,7 @@ ${improvementText}
         event.timestamp
       ]);
     } catch (error) {
-      console.warn('Failed to log intelligence event:', error);
+      // Failed to log intelligence event - non-critical, continuing
       // Don't throw - logging failure shouldn't break the main operation
       // In test mode, database logging may not work
     }
@@ -1724,7 +1724,7 @@ ${improvementText}
     const mcpConfigs = this.detectAvailableMCPs();
     
     if (mcpConfigs.length === 0) {
-      console.error('WARNING: No MCPs detected! Running in standalone mode with mock implementations.');
+      // WARNING: No MCPs detected! Running in standalone mode with mock implementations.
       // Instead of throwing an error, use test mode
       process.env.MCP_TEST_MODE = 'true';
       // Add minimal MCP configs for test mode
@@ -1732,7 +1732,7 @@ ${improvementText}
         { type: 'memory' },
         { type: 'filesystem' }
       );
-      console.error('INFO: Enabled test mode with mock MCPs');
+      // INFO: Enabled test mode with mock MCPs
     }
 
     // console.log(`Configuring ${mcpConfigs.length} available MCPs: ${mcpConfigs.map(c => c.type).join(', ')}`);
@@ -1754,7 +1754,7 @@ ${improvementText}
         this.rulesEngine = new NullSessionRulesEngine();
       }
     } catch (error) {
-      console.warn('Failed to initialize Session Rules Engine:', error);
+      // Failed to initialize Session Rules Engine - using null engine
       this.rulesEngine = new NullSessionRulesEngine();
     }
 
@@ -1774,4 +1774,7 @@ ${improvementText}
 
 // Start the server
 const server = new ConversationContinuityServer();
-server.run().catch(console.error);
+server.run().catch(error => {
+  // Server startup error - MCP server failed to start
+  process.exit(1);
+});

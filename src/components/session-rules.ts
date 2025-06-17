@@ -21,7 +21,8 @@ import {
   SessionRuleEntity,
   RuleEnforcementEntity,
   RuleScope,
-  EnforcementLevel
+  EnforcementLevel,
+  RuleCondition
 } from '@/types/rule-types.js';
 import type { MemoryMCPClient } from '@/utils/mcp-client-factory.js';
 
@@ -330,10 +331,7 @@ export class SessionRulesEngine implements RuleEngine {
         rule.scope,
         (rule.triggers || []).join(','),
         `usage:${rule.usageCount},violations:${rule.violationCount}`,
-        `effectiveness:${rule.effectiveness || 'unknown'}`,
-        `created:${rule.createdAt.toISOString()}`,
-        `updated:${rule.updatedAt.toISOString()}`,
-        `conditions:${JSON.stringify(rule.conditions || [])}`
+        `effectiveness:${rule.effectiveness || 'unknown'}`
       ]
     };
 
@@ -370,21 +368,13 @@ export class SessionRulesEngine implements RuleEngine {
         ? parseFloat(effectivenessMatch[1])
         : undefined;
 
-    // Parse timestamps from metadata
-    const createdAtStr = obs[9]?.replace('created:', '') || new Date().toISOString();
-    const updatedAtStr = obs[10]?.replace('updated:', '') || new Date().toISOString();
-    const createdAt = new Date(createdAtStr);
-    const updatedAt = new Date(updatedAtStr);
+    // Use current date for timestamps since we don't store them in observations anymore
+    const now = new Date();
+    const createdAt = now;
+    const updatedAt = now;
 
-    // Parse conditions from observations
-    const conditionsStr = obs[11]?.replace('conditions:', '') || '[]';
-    let conditions = [];
-    try {
-      conditions = JSON.parse(conditionsStr);
-    } catch (error) {
-      console.warn('Failed to parse rule conditions:', error);
-      conditions = [];
-    }
+    // Default empty conditions since we don't store them in observations anymore
+    const conditions: RuleCondition[] = [];
 
     return {
       id: entity.name.replace('SessionRule_', ''),
@@ -598,8 +588,8 @@ export class SessionRulesEngine implements RuleEngine {
   /**
    * Detect conflicts between rule enforcement results
    */
-  private async detectRuleConflicts(enforcement: RuleEnforcementResult[]): Promise<string[]> {
-    const conflicts: string[] = [];
+  private async detectRuleConflicts(enforcement: RuleEnforcementResult[]): Promise<RuleConflict[]> {
+    const conflicts: RuleConflict[] = [];
 
     // Check for enforcement level conflicts
     const hasBlocked = enforcement.some(e => e.result === 'blocked');
@@ -607,11 +597,21 @@ export class SessionRulesEngine implements RuleEngine {
     const hasWarned = enforcement.some(e => e.result === 'warned');
 
     if (hasBlocked && hasAllowed) {
-      conflicts.push('Conflicting enforcement: Some rules block while others allow the same action');
+      conflicts.push({
+        conflictType: 'contradictory',
+        description: 'Conflicting enforcement: Some rules block while others allow the same action',
+        conflictingRuleIds: enforcement.map(e => e.ruleId),
+        suggestedResolution: 'Review rule priorities and enforcement levels to ensure consistency'
+      });
     }
 
     if (hasWarned && hasBlocked) {
-      conflicts.push('Enforcement conflict: Action both warned and blocked by different rules');
+      conflicts.push({
+        conflictType: 'contradictory',
+        description: 'Enforcement conflict: Action both warned and blocked by different rules',
+        conflictingRuleIds: enforcement.filter(e => e.result === 'warned' || e.result === 'blocked').map(e => e.ruleId),
+        suggestedResolution: 'Consolidate conflicting rules or adjust enforcement hierarchy'
+      });
     }
 
     // Check for priority conflicts
@@ -624,7 +624,12 @@ export class SessionRulesEngine implements RuleEngine {
     const uniquePriorities = new Set(resolvedPriorities);
 
     if (enforcement.length > 1 && uniquePriorities.size === resolvedPriorities.length) {
-      conflicts.push('Multiple rules with different priorities affecting the same action');
+      conflicts.push({
+        conflictType: 'redundant',
+        description: 'Multiple rules with different priorities affecting the same action',
+        conflictingRuleIds: enforcement.map(e => e.ruleId),
+        suggestedResolution: 'Consider consolidating rules or adjusting priorities for clearer hierarchy'
+      });
     }
 
     return conflicts;
@@ -639,37 +644,67 @@ export class SessionRulesEngine implements RuleEngine {
   private async generateOptimizationSuggestions(
       enforcement: RuleEnforcementResult[],
       action: ProposedAction
-  ): Promise<string[]> {
-    const suggestions: string[] = [];
+  ): Promise<RuleOptimization[]> {
+    const suggestions: RuleOptimization[] = [];
 
     // If multiple rules triggered, suggest consolidation
     if (enforcement.length > 2) {
-      suggestions.push(`Consider consolidating ${enforcement.length} triggered rules for simpler enforcement`);
+      suggestions.push({
+        optimizationType: 'merge_similar',
+        description: `Consider consolidating ${enforcement.length} triggered rules for simpler enforcement`,
+        expectedImprovement: 'Reduced rule complexity and clearer enforcement',
+        affectedRuleIds: enforcement.map(e => e.ruleId)
+      });
     }
 
     // If action was blocked, suggest alternative approaches
     const blocked = enforcement.filter(e => e.result === 'blocked');
     if (blocked.length > 0) {
-      suggestions.push('Consider breaking down the action into smaller, compliant steps');
-      suggestions.push('Review rule enforcement levels - some rules may be too strict');
+      suggestions.push({
+        optimizationType: 'change_enforcement',
+        description: 'Consider breaking down the action into smaller, compliant steps',
+        expectedImprovement: 'Better user experience with incremental compliance',
+        affectedRuleIds: blocked.map(e => e.ruleId)
+      });
+      suggestions.push({
+        optimizationType: 'change_enforcement',
+        description: 'Review rule enforcement levels - some rules may be too strict',
+        expectedImprovement: 'Reduced user friction while maintaining safety',
+        affectedRuleIds: blocked.map(e => e.ruleId)
+      });
     }
 
     // If action was warned but not blocked, suggest rule refinement
     const warned = enforcement.filter(e => e.result === 'warned');
     if (warned.length > 0 && blocked.length === 0) {
-      suggestions.push('Consider promoting warning rules to soft blocks for better compliance');
+      suggestions.push({
+        optimizationType: 'change_enforcement',
+        description: 'Consider promoting warning rules to soft blocks for better compliance',
+        expectedImprovement: 'Improved rule effectiveness and user awareness',
+        affectedRuleIds: warned.map(e => e.ruleId)
+      });
     }
 
     // If no rules triggered, suggest creating new rules
     if (enforcement.length === 0 && action.riskLevel === 'high') {
-      suggestions.push('Consider creating rules for high-risk actions to ensure oversight');
+      suggestions.push({
+        optimizationType: 'refine_conditions',
+        description: 'Consider creating rules for high-risk actions to ensure oversight',
+        expectedImprovement: 'Better risk management and oversight',
+        affectedRuleIds: []
+      });
     }
 
     // Check for rule effectiveness and suggest improvements
     for (const result of enforcement) {
       const rule = await this.getRule(result.ruleId);
       if (rule && rule.effectiveness !== undefined && rule.effectiveness < 0.5) {
-        suggestions.push(`Rule "${rule.rule}" has low effectiveness - consider updating its enforcement strategy`);
+        suggestions.push({
+          optimizationType: 'change_enforcement',
+          description: `Rule "${rule.rule}" has low effectiveness - consider updating its enforcement strategy`,
+          expectedImprovement: 'Improved rule compliance and user satisfaction',
+          affectedRuleIds: [rule.id]
+        });
       }
     }
 

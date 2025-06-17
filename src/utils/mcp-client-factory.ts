@@ -22,6 +22,9 @@ const SOURCE_DIR = '/Users/Luther/RiderProjects';
 // Patterns to exclude from checkpoints (keep them small!)
 const EXCLUDE_PATTERNS = [
   'node_modules',
+  'RiderProjects/*/node_modules',
+  'RiderProjects/*/*/node_modules',
+  'RiderProjects/*/*/*/node_modules',
   '.git',
   'dist',
   'build',
@@ -65,10 +68,18 @@ class RealCheckpointManager {
     // Build exclude arguments for tar
     const excludeArgs = EXCLUDE_PATTERNS.map(pattern => `--exclude='${pattern}'`).join(' ');
     
+    // Add comprehensive exclusions for known large directories
+    const additionalExclusions = [
+      `--exclude='RiderProjects/FantasyGM/database/NFL_Analytics/seed_data'`,
+      `--exclude='*/node_modules/*'`,
+      `--exclude='**/node_modules/**'`
+    ].join(' ');
+    
     // Create tarball of RiderProjects (excluding large dirs)
-    const tarCommand = `cd "${SOURCE_DIR}/.." && tar ${excludeArgs} -czf "${tarPath}" RiderProjects`;
+    const tarCommand = `cd "${SOURCE_DIR}/.." && tar ${excludeArgs} ${additionalExclusions} -czf "${tarPath}" RiderProjects`;
     
     console.log(`Creating checkpoint tarball: ${checkpointId}`);
+    console.log(`Tar command: ${tarCommand}`);
     await execAsync(tarCommand);
     
     // Get file stats
@@ -183,9 +194,40 @@ class RealCheckpointManager {
 
 // ===== TEST MODE DETECTION =====
 const isTestMode = () => {
-  return !(globalThis as any).local__memory__read_graph || 
-         process.env.NODE_ENV === 'test' ||
-         process.env.MCP_TEST_MODE === 'true';
+  // Explicit test mode from environment
+  if (process.env.MCP_TEST_MODE === 'true' || process.env.NODE_ENV === 'test') {
+    return true;
+  }
+  
+  // Production mode explicitly set
+  if (process.env.MCP_TEST_MODE === 'false' || process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  
+  // Fallback: check if Memory MCP global functions are available
+  const hasMemoryMCP = typeof (globalThis as any).local__memory__read_graph === 'function';
+  
+  // Log the detection result for debugging
+  if (!hasMemoryMCP) {
+    console.warn('⚠️  Memory MCP global functions not detected - enabling test mode');
+  }
+  
+  return !hasMemoryMCP;
+};
+
+// ===== LOGGING CONTROLS =====
+const shouldLog = (level: 'debug' | 'info' | 'warn' | 'error' = 'info') => {
+  if (process.env.NODE_ENV === 'production' && level === 'debug') {
+    return false;
+  }
+  return true;
+};
+
+const mcpLog = (level: 'debug' | 'info' | 'warn' | 'error', message: string) => {
+  if (shouldLog(level)) {
+    const prefix = isTestMode() ? '[TEST MODE]' : '[PROD MODE]';
+    console[level](`${prefix} ${message}`);
+  }
 };
 import type { MCPClientConfig } from '@/types/orchestration-types.js';
 import type {
@@ -360,13 +402,15 @@ export class MCPClientFactory {
 
   async createMemoryClientSafe(): Promise<MemoryMCPClient | null> {
     if (!this.hasClientConfig('memory')) {
-      // console.log('Memory MCP not configured - using null client');
+      mcpLog('warn', 'Memory MCP not configured - returning null client');
       return null;
     }
     try {
-      return await this.createMemoryClient();
+      const client = await this.createMemoryClient();
+      mcpLog('info', 'Memory MCP client created successfully');
+      return client;
     } catch (error) {
-      console.warn('Memory MCP failed to initialize:', error);
+      mcpLog('error', `Memory MCP failed to initialize: ${error}`);
       return null;
     }
   }
@@ -436,7 +480,7 @@ export class MCPClientFactory {
     databaseAnalytics: DatabaseMCPClient | null;
     availableMCPs: MCPType[];
   }> {
-    // console.log(`Initializing available MCPs: ${this.getAvailableMCPs().join(', ')}`);
+    mcpLog('info', `Initializing available MCPs: ${this.getAvailableMCPs().join(', ')}`);
     
     const [memory, claudepoint, filesystem, git, databasePlatform, databaseAnalytics] = 
       await Promise.all([
@@ -457,7 +501,7 @@ export class MCPClientFactory {
       databaseAnalytics && 'database-analytics'
     ].filter(Boolean) as MCPType[];
 
-    // console.log(`Successfully initialized MCPs: ${successfullyInitialized.join(', ')}`);
+    mcpLog('info', `Successfully initialized MCPs: ${successfullyInitialized.join(', ')}`);
 
     return {
       memory,
@@ -604,11 +648,20 @@ export class MCPClientFactory {
 
 class MemoryClientAdapter implements MemoryMCPClient {
   async createEntities(entities: MemoryEntity[]): Promise<void> {
+    mcpLog('debug', `Creating ${entities.length} entities: ${entities.map(e => e.name).join(', ')}`);
+    
     if (isTestMode()) {
-      // console.log(`[TEST MODE] Creating ${entities.length} entities`);
+      mcpLog('warn', `Test mode: Skipping creation of ${entities.length} entities`);
       return;
     }
-    await (globalThis as any).local__memory__create_entities({ entities });
+    
+    try {
+      await (globalThis as any).local__memory__create_entities({ entities });
+      mcpLog('info', `Successfully created ${entities.length} entities in Memory MCP`);
+    } catch (error) {
+      mcpLog('error', `Failed to create entities in Memory MCP: ${error}`);
+      throw error;
+    }
   }
 
   async addObservations(observations: MemoryObservation[]): Promise<void> {
@@ -620,12 +673,22 @@ class MemoryClientAdapter implements MemoryMCPClient {
   }
 
   async searchNodes(query: string): Promise<MemoryNode[]> {
+    mcpLog('debug', `Searching nodes with query: "${query}"`);
+    
     if (isTestMode()) {
-      // console.log(`[TEST MODE] Searching nodes: "${query}"`);
+      mcpLog('warn', `Test mode: Returning empty search results for query: "${query}"`);
       return [];
     }
-    const result = await (globalThis as any).local__memory__search_nodes({ query });
-    return result.nodes || [];
+    
+    try {
+      const result = await (globalThis as any).local__memory__search_nodes({ query });
+      const nodes = result.nodes || [];
+      mcpLog('info', `Found ${nodes.length} nodes matching query: "${query}"`);
+      return nodes;
+    } catch (error) {
+      mcpLog('error', `Failed to search nodes in Memory MCP: ${error}`);
+      throw error;
+    }
   }
 
   async openNodes(names: string[]): Promise<MemoryNode[]> {
@@ -674,8 +737,10 @@ class MemoryClientAdapter implements MemoryMCPClient {
   }
 
   async readGraph(): Promise<MemoryGraph> {
+    mcpLog('debug', 'Reading complete Memory MCP graph');
+    
     if (isTestMode()) {
-      console.log(`[TEST MODE] Reading graph (mock data)`);
+      mcpLog('warn', 'Test mode: Returning mock graph data');
       return {
         entities: [
           {
@@ -687,7 +752,15 @@ class MemoryClientAdapter implements MemoryMCPClient {
         relations: []
       };
     }
-    return await (globalThis as any).local__memory__read_graph({});
+    
+    try {
+      const graph = await (globalThis as any).local__memory__read_graph({});
+      mcpLog('info', `Successfully read graph: ${graph.entities?.length || 0} entities, ${graph.relations?.length || 0} relations`);
+      return graph;
+    } catch (error) {
+      mcpLog('error', `Failed to read graph from Memory MCP: ${error}`);
+      throw error;
+    }
   }
 }
 

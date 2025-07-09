@@ -4,6 +4,78 @@
 
 This roadmap outlines the implementation plan to fix the Memory MCP integration issue in the conversation-continuity MCP server. The core problem is that the current implementation incorrectly attempts to call Memory MCP functions through `globalThis` instead of establishing proper client-server connections through the MCP protocol.
 
+## Research Findings & Insights (Phase 1 Complete)
+
+### 🔍 MCP SDK Client Pattern Discovery
+
+After analyzing the codebase and MCP SDK patterns, we've identified the correct approach for client-server connections:
+
+#### Key Insights:
+
+1. **MCP SDK Already Available**: The project already has `@modelcontextprotocol/sdk` v1.0.0 installed
+2. **Server Implementation Correct**: The conversation-continuity server properly uses `Server` and `StdioServerTransport`
+3. **Client Pattern Identified**: Need to use `Client` class with `StdioClientTransport` for connections
+4. **Tool Naming Convention**: Memory MCP tools don't use the `local__memory__` prefix in actual calls
+
+#### Correct Client Connection Pattern:
+
+```typescript
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+// Create transport with process spawning
+const transport = new StdioClientTransport({
+  command: 'node',
+  args: ['path/to/memory-mcp/index.js'],
+  env: process.env
+});
+
+// Create client with capabilities
+const client = new Client({
+  name: 'conversation-continuity-client',
+  version: '1.0.0'
+}, {
+  capabilities: {
+    tools: {},
+    prompts: {},
+    resources: {}
+  }
+});
+
+// Connect and use
+await client.connect(transport);
+const response = await client.callTool({
+  name: 'read_graph',  // Note: no 'memory__' prefix needed
+  arguments: {}
+});
+```
+
+#### Initial Implementation Progress:
+
+✅ **Created `MCPClientManager`** (`src/utils/mcp-client-manager.ts`):
+- Proper connection management with `StdioClientTransport`
+- Connection state tracking and health monitoring
+- Retry logic with exponential backoff
+- Tool calling through MCP protocol
+
+✅ **Created `MemoryClientAdapterV2`** (`src/utils/memory-client-adapter-v2.ts`):
+- Replaces broken `globalThis` calls
+- Uses `MCPClientManager` for all operations
+- Maintains same interface for compatibility
+- Includes proper error handling and logging
+
+#### Test Mode Detection Fix Required:
+
+The current `isTestMode()` function incorrectly checks for `globalThis` functions:
+
+```typescript
+// ❌ Current (broken)
+const hasMemoryMCP = typeof (globalThis as any).local__memory__read_graph === 'function';
+
+// ✅ Should be
+const hasMemoryMCP = mcpManager.isConnected('memory');
+```
+
 ## Current State Analysis
 
 ### 🔴 Problem
@@ -226,13 +298,43 @@ describe('MCP Client Integration', () => {
 - [ ] Update database client adapters
 - [ ] Implement proper PostgreSQL protocol
 
+## Next Immediate Steps (Based on Research)
+
+### Configuration Requirements Discovered:
+
+1. **Find Memory MCP Location**: Need to locate where Memory MCP server is installed
+2. **Update Environment Variables**: Set `MEMORY_MCP_PATH` and `MEMORY_MCP_COMMAND`
+3. **Tool Name Mapping**: Confirm actual tool names used by Memory MCP (likely without prefixes)
+
+### Integration Steps:
+
+1. **Update `MCPClientFactory`**:
+   - Replace `MemoryClientAdapter` with `MemoryClientAdapterV2`
+   - Initialize `MCPClientManager` with proper config
+   - Remove `isTestMode()` checks based on `globalThis`
+
+2. **Test Connection**:
+   ```bash
+   # Set environment variables
+   export MEMORY_MCP_PATH="/path/to/memory-mcp/dist/index.js"
+   export MEMORY_MCP_COMMAND="node"
+   
+   # Run conversation-continuity with debug logging
+   npm run dev
+   ```
+
+3. **Verify Tool Names**:
+   - List available tools after connection
+   - Update tool names in adapter if needed
+   - Document the mapping
+
 ## Implementation Checklist
 
 ### Immediate Actions (Day 1)
-- [ ] Create feature branch: `feature/proper-mcp-client-integration`
-- [ ] Set up development environment with Memory MCP running
-- [ ] Create `mcp-client-manager.ts` scaffolding
-- [ ] Document MCP SDK client examples
+- [x] Create feature branch: `feature/proper-mcp-client-integration`
+- [x] Set up development environment with Memory MCP running
+- [x] Create `mcp-client-manager.ts` scaffolding
+- [x] Document MCP SDK client examples
 
 ### Week 1 Deliverables
 - [ ] Working Memory MCP client connection
@@ -317,7 +419,12 @@ async readGraph(): Promise<MemoryGraph> {
 
 ---
 
-**Document Version**: 1.0  
+**Document Version**: 1.1  
 **Created**: 2025-07-09  
+**Last Updated**: 2025-07-09  
 **Author**: Luther Garcia  
-**Status**: Ready for Implementation
+**Status**: Phase 1 Complete - Initial Implementation Started
+
+### Version History:
+- v1.0 (2025-07-09): Initial roadmap created
+- v1.1 (2025-07-09): Added research findings, created MCPClientManager and MemoryClientAdapterV2

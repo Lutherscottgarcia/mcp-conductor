@@ -1,0 +1,323 @@
+# Proper MCP Client Integration Roadmap
+
+## Executive Summary
+
+This roadmap outlines the implementation plan to fix the Memory MCP integration issue in the conversation-continuity MCP server. The core problem is that the current implementation incorrectly attempts to call Memory MCP functions through `globalThis` instead of establishing proper client-server connections through the MCP protocol.
+
+## Current State Analysis
+
+### 🔴 Problem
+- **Incorrect Pattern**: Using `globalThis.local__memory__read_graph()` calls
+- **Architecture Violation**: Treating separate MCP servers as in-process functions
+- **Integration Failure**: Memory MCP functions return "not a function" errors
+- **Workaround Mode**: System falls back to test mode with mock data
+
+### 🟢 Working Components
+- Memory MCP server itself works perfectly when accessed directly
+- Conversation-continuity MCP server runs without errors
+- Claudepoint (checkpoint) functionality works with real file operations
+- Test mode provides graceful degradation
+
+## Implementation Phases
+
+### Phase 1: Research & Design (2-3 days)
+
+#### 1.1 Study MCP SDK Client Patterns
+- [ ] Review MCP SDK documentation for client-server communication
+- [ ] Analyze how Claude Desktop connects to MCP servers
+- [ ] Study the transport layer (stdio, HTTP, WebSocket options)
+- [ ] Document the correct client initialization pattern
+
+#### 1.2 Architecture Design
+- [ ] Design the new client connection architecture
+- [ ] Plan configuration management for MCP endpoints
+- [ ] Design error handling and reconnection strategies
+- [ ] Create sequence diagrams for MCP interactions
+
+#### 1.3 Configuration Strategy
+```typescript
+interface MCPConnectionConfig {
+  memory: {
+    command: string;      // e.g., "node"
+    args: string[];       // e.g., ["path/to/memory-mcp/index.js"]
+    transport: 'stdio' | 'http' | 'websocket';
+    env?: Record<string, string>;
+  };
+  // Similar for other MCPs...
+}
+```
+
+### Phase 2: Core Implementation (3-4 days)
+
+#### 2.1 Create MCP Client Manager
+```typescript
+// src/utils/mcp-client-manager.ts
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+export class MCPClientManager {
+  private clients: Map<string, Client> = new Map();
+  
+  async connectToMemoryMCP(config: MCPConnectionConfig['memory']): Promise<Client> {
+    const transport = new StdioClientTransport({
+      command: config.command,
+      args: config.args,
+      env: config.env
+    });
+    
+    const client = new Client({
+      name: 'conversation-continuity-client',
+      version: '1.0.0'
+    }, {
+      capabilities: {}
+    });
+    
+    await client.connect(transport);
+    this.clients.set('memory', client);
+    return client;
+  }
+}
+```
+
+#### 2.2 Update MemoryClientAdapter
+```typescript
+// src/utils/mcp-client-factory.ts
+class MemoryClientAdapter implements MemoryMCPClient {
+  private client: Client;
+  
+  constructor(client: Client) {
+    this.client = client;
+  }
+  
+  async readGraph(): Promise<MemoryGraph> {
+    try {
+      // Use proper MCP protocol call
+      const response = await this.client.callTool({
+        name: 'memory__read_graph',
+        arguments: {}
+      });
+      
+      return response.content as MemoryGraph;
+    } catch (error) {
+      console.error('Failed to read graph from Memory MCP:', error);
+      throw error;
+    }
+  }
+  
+  async createEntities(entities: MemoryEntity[]): Promise<void> {
+    await this.client.callTool({
+      name: 'memory__create_entities',
+      arguments: { entities }
+    });
+  }
+  
+  // Update all other methods similarly...
+}
+```
+
+#### 2.3 Remove GlobalThis Dependencies
+- [ ] Search and remove all `(globalThis as any).local__memory__` calls
+- [ ] Remove test mode detection based on globalThis functions
+- [ ] Update error handling to handle connection failures
+
+### Phase 3: Configuration Management (2 days)
+
+#### 3.1 Configuration File Structure
+```json
+// config/mcp-connections.json
+{
+  "connections": {
+    "memory": {
+      "enabled": true,
+      "command": "node",
+      "args": ["../memory-mcp/dist/index.js"],
+      "transport": "stdio",
+      "retryPolicy": {
+        "maxAttempts": 3,
+        "backoffMs": 1000
+      }
+    },
+    "filesystem": {
+      "enabled": true,
+      "command": "node",
+      "args": ["../filesystem-mcp/dist/index.js"],
+      "transport": "stdio"
+    }
+  }
+}
+```
+
+#### 3.2 Environment Variable Support
+```typescript
+// Support for environment-based configuration
+const memoryMCPPath = process.env.MEMORY_MCP_PATH || '../memory-mcp/dist/index.js';
+const memoryMCPTransport = process.env.MEMORY_MCP_TRANSPORT || 'stdio';
+```
+
+### Phase 4: Error Handling & Resilience (2 days)
+
+#### 4.1 Connection Health Monitoring
+```typescript
+class MCPHealthMonitor {
+  async checkConnection(client: Client): Promise<boolean> {
+    try {
+      // Send a lightweight ping/health check
+      await client.callTool({ name: 'health_check', arguments: {} });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  
+  async reconnect(clientManager: MCPClientManager, mcpType: string): Promise<void> {
+    // Implement exponential backoff reconnection
+  }
+}
+```
+
+#### 4.2 Graceful Degradation
+- [ ] Implement circuit breaker pattern for failing connections
+- [ ] Provide meaningful error messages when MCPs are unavailable
+- [ ] Cache last known good state for read operations
+- [ ] Queue write operations for retry when connection restored
+
+### Phase 5: Testing & Migration (2-3 days)
+
+#### 5.1 Unit Tests
+```typescript
+// tests/mcp-client-integration.test.ts
+describe('MCP Client Integration', () => {
+  it('should connect to Memory MCP server', async () => {
+    const manager = new MCPClientManager();
+    const client = await manager.connectToMemoryMCP(testConfig);
+    expect(client.isConnected()).toBe(true);
+  });
+  
+  it('should handle connection failures gracefully', async () => {
+    // Test with invalid config
+  });
+});
+```
+
+#### 5.2 Integration Tests
+- [ ] Test with real Memory MCP server running
+- [ ] Test connection recovery scenarios
+- [ ] Test concurrent operations
+- [ ] Performance benchmarks
+
+#### 5.3 Migration Guide
+1. Update dependencies
+2. Configure MCP connections
+3. Test in development environment
+4. Deploy with monitoring
+
+### Phase 6: Additional MCP Integrations (1 week)
+
+#### 6.1 Filesystem MCP Client
+- [ ] Implement FilesystemClientAdapter with proper client
+- [ ] Remove globalThis filesystem calls
+- [ ] Add connection configuration
+
+#### 6.2 Git MCP Client (when available)
+- [ ] Design Git MCP client integration
+- [ ] Implement placeholder with proper interface
+
+#### 6.3 Database MCP Clients
+- [ ] Update database client adapters
+- [ ] Implement proper PostgreSQL protocol
+
+## Implementation Checklist
+
+### Immediate Actions (Day 1)
+- [ ] Create feature branch: `feature/proper-mcp-client-integration`
+- [ ] Set up development environment with Memory MCP running
+- [ ] Create `mcp-client-manager.ts` scaffolding
+- [ ] Document MCP SDK client examples
+
+### Week 1 Deliverables
+- [ ] Working Memory MCP client connection
+- [ ] Updated MemoryClientAdapter with proper protocol
+- [ ] Basic error handling and logging
+- [ ] Unit tests for client connection
+
+### Week 2 Deliverables
+- [ ] Configuration management system
+- [ ] All MCP client adapters updated
+- [ ] Integration tests passing
+- [ ] Documentation updated
+
+## Success Criteria
+
+### Functional Requirements
+- ✅ Memory MCP operations work through proper client connections
+- ✅ No globalThis function calls remain
+- ✅ Graceful handling of MCP server unavailability
+- ✅ All existing features continue to work
+
+### Performance Requirements
+- Response time < 100ms for read operations
+- Connection establishment < 1 second
+- Automatic reconnection within 30 seconds
+
+### Quality Requirements
+- 90% test coverage for new code
+- No console errors in normal operation
+- Clear error messages for users
+
+## Risks & Mitigations
+
+### Risk 1: MCP SDK Limitations
+- **Risk**: SDK might not support all needed features
+- **Mitigation**: Early prototype to validate capabilities
+
+### Risk 2: Performance Impact
+- **Risk**: Client-server overhead vs direct calls
+- **Mitigation**: Implement caching and connection pooling
+
+### Risk 3: Configuration Complexity
+- **Risk**: Users struggle with MCP connection setup
+- **Mitigation**: Provide sensible defaults and setup wizard
+
+## Code Examples
+
+### Before (Current - Broken)
+```typescript
+// ❌ Incorrect - tries to call as local function
+async readGraph(): Promise<MemoryGraph> {
+  const graph = await (globalThis as any).local__memory__read_graph({});
+  return graph;
+}
+```
+
+### After (Fixed)
+```typescript
+// ✅ Correct - uses MCP client protocol
+async readGraph(): Promise<MemoryGraph> {
+  const response = await this.mcpClient.callTool({
+    name: 'read_graph',
+    arguments: {}
+  });
+  return response.content as MemoryGraph;
+}
+```
+
+## Next Steps
+
+1. **Get Approval**: Review this roadmap with stakeholders
+2. **Set Up Dev Environment**: Ensure all MCP servers are available
+3. **Start Phase 1**: Begin with MCP SDK research
+4. **Create Tracking Issue**: GitHub issue with task breakdown
+
+## Resources
+
+- [MCP SDK Documentation](https://github.com/modelcontextprotocol/sdk)
+- [Memory MCP Server Code](../../../memory-mcp)
+- [MCP Protocol Specification](https://modelcontextprotocol.io/docs)
+- [Client-Server Architecture Patterns](https://modelcontextprotocol.io/docs/architecture)
+
+---
+
+**Document Version**: 1.0  
+**Created**: 2025-07-09  
+**Author**: Luther Garcia  
+**Status**: Ready for Implementation

@@ -192,6 +192,31 @@ class RealCheckpointManager {
   }
 }
 
+// ===== MCP CLIENT MANAGER SINGLETON =====
+let mcpClientManagerInstance: MCPClientManager | null = null;
+
+const getMCPClientManager = (): MCPClientManager => {
+  if (!mcpClientManagerInstance) {
+    // Create configuration from environment variables
+    const config: MCPConnectionsConfig = {
+      memory: {
+        command: process.env.MEMORY_MCP_COMMAND || 'node',
+        args: [process.env.MEMORY_MCP_PATH || path.join(__dirname, '../../../../memory-mcp/dist/index.js')],
+        transport: 'stdio',
+        retryPolicy: {
+          maxAttempts: 3,
+          backoffMs: 1000
+        }
+      }
+      // Add other MCP configurations as we implement them
+    };
+    
+    mcpClientManagerInstance = new MCPClientManager(config);
+  }
+  
+  return mcpClientManagerInstance;
+};
+
 // ===== TEST MODE DETECTION =====
 const isTestMode = () => {
   // Explicit test mode from environment
@@ -204,12 +229,13 @@ const isTestMode = () => {
     return false;
   }
   
-  // Fallback: check if Memory MCP global functions are available
-  const hasMemoryMCP = typeof (globalThis as any).local__memory__read_graph === 'function';
+  // New approach: check if we can connect to Memory MCP through the manager
+  const manager = getMCPClientManager();
+  const hasMemoryMCP = manager.isConnected('memory');
   
   // Log the detection result for debugging
   if (!hasMemoryMCP) {
-    // console.warn('⚠️  Memory MCP global functions not detected - enabling test mode');
+    // console.warn('⚠️  Memory MCP not connected - enabling test mode');
   }
   
   return !hasMemoryMCP;
@@ -228,6 +254,8 @@ const mcpLog = (level: 'debug' | 'info' | 'warn' | 'error', message: string) => 
   // All logging disabled to prevent protocol contamination
   return;
 };
+import { MCPClientManager, MCPConnectionsConfig } from './mcp-client-manager.js';
+import { MemoryClientAdapterV2 } from './memory-client-adapter-v2.js';
 import type { MCPClientConfig } from '@/types/orchestration-types.js';
 import type {
   MemoryEntity,
@@ -337,7 +365,9 @@ export class MCPClientFactory {
       return this.clients.get('memory');
     }
 
-    const client = new MemoryClientAdapter();
+    // Use the new adapter with proper MCP client connection
+    const manager = getMCPClientManager();
+    const client = new MemoryClientAdapterV2(manager);
     await this.initializeClient('memory', client);
     return client;
   }
@@ -645,6 +675,9 @@ export class MCPClientFactory {
  * They provide a unified interface while handling MCP-specific details
  */
 
+// OLD ADAPTER - REPLACED BY MemoryClientAdapterV2
+// Keeping for reference during migration
+/*
 class MemoryClientAdapter implements MemoryMCPClient {
   async createEntities(entities: MemoryEntity[]): Promise<void> {
     mcpLog('debug', `Creating ${entities.length} entities: ${entities.map(e => e.name).join(', ')}`);
@@ -762,6 +795,7 @@ class MemoryClientAdapter implements MemoryMCPClient {
     }
   }
 }
+*/
 
 class ClaudepointClientAdapter implements ClaudepointMCPClient {
   constructor(private workingDirectory?: string) {}

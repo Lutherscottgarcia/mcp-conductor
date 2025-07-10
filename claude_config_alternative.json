@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx", 
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/Luther/RiderProjects", "/Users/Luther/Library/Application Support/Claude"]
+    },
+    "conversation-continuity": {
+      "command": "node",
+      "args": ["/Users/Luther/RiderProjects/claude/mcp-servers/conversation-continuity/dist/index.js"],
+      "env": {
+        "MCP_TEST_MODE": "false",
+        "MCP_CONDUCTOR_PROJECT_DIR": "/Users/Luther/RiderProjects",
+        "MCP_CONDUCTOR_WORKSPACE": "/Users/Luther/RiderProjects/claude",
+        "NODE_ENV": "production",
+        "ENABLE_INTERNAL_MEMORY_MCP": "true",
+        "MEMORY_MCP_PATH": "/Users/Luther/RiderProjects/claude/mcp-servers/memory-mcp/index.js",
+        "MEMORY_MCP_COMMAND": "node"
+      }
+    }
+  }
+}
